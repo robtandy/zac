@@ -1,0 +1,15 @@
+[project]
+name = "zac-mono"
+version = "0.0.0"
+requires-python = ">=3.11"
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/*/tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
