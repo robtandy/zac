@@ -46,6 +46,11 @@ export class ChatUI {
         return;
       }
 
+      if (trimmed === "/reload") {
+        this.connection.send({ type: "steer", message: "/reload" });
+        return;
+      }
+
       if (trimmed.startsWith("!")) {
         const cmd = trimmed.slice(1).trim();
         if (cmd) this.runShellCommand(cmd);
@@ -185,6 +190,19 @@ export class ChatUI {
           this.connection.send({ type: "prompt", message: msg });
         }
         this.inputQueuedDuringCompaction = [];
+        break;
+      }
+
+      case "reload_start":
+        this.setStatus("Reloading...");
+        this.insertBeforeEditor(new Text("[Reloading agent and web packages...]", 1, 0, compactionColor));
+        break;
+
+      case "reload_end": {
+        const color = event.success ? compactionColor : errorColor;
+        this.insertBeforeEditor(new Text(`[${event.message}]`, 0, 0, color));
+        this.insertBeforeEditor(new Spacer(1));
+        this.setStatus("Ready");
         break;
       }
 

@@ -18,4 +18,6 @@ export type ServerEvent =
   | { type: "error"; message: string }
   | { type: "context_info"; system: number; tools: number; user: number; assistant: number; tool_results: number; context_window: number }
   | { type: "compaction_start" }
-  | { type: "compaction_end"; summary: string; tokens_before: number };
+  | { type: "compaction_end"; summary: string; tokens_before: number }
+  | { type: "reload_start" }
+  | { type: "reload_end"; success: boolean; message: string };
