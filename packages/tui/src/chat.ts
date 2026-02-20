@@ -87,7 +87,9 @@ export class ChatUI {
 
 
     this.tui.addChild(this.editor);
-    this.statusBar = new Text("", 1, 0, statusBarColor);
+    const cwd = process.cwd();
+    const dirName = cwd.split(/[\/]/).pop() || cwd;
+    this.statusBar = new Text(`Ready | ${dirName}`, 1, 0, statusBarColor);
     this.tui.addChild(this.statusBar);
     this.tui.setFocus(this.editor);
 
@@ -410,7 +412,9 @@ export class ChatUI {
   }
 
   private setStatus(text: string): void {
-    this.statusBar.setText(text);
+    const cwd = process.cwd();
+    const dirName = cwd.split(/[\/]/).pop() || cwd;
+    this.statusBar.setText(`${text} | ${dirName}`);
     this.tui.requestRender();
   }
 
