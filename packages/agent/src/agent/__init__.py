@@ -1,3 +1,4 @@
+from .canvas_tool import CanvasTool
 from .client import AgentClient
 from .events import AgentEvent, EventType
 from .exceptions import AgentError, AgentNotRunning, ProcessNotRunning
@@ -26,6 +27,7 @@ __all__ = [
     "ToolRegistry",
     "ToolResult",
     "BashTool",
+    "CanvasTool",
     "ReadTool",
     "WriteTool",
     "EditTool",

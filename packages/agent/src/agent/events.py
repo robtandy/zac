@@ -17,6 +17,9 @@ class EventType(Enum):
     ERROR = "error"
     COMPACTION_START = "compaction_start"
     COMPACTION_END = "compaction_end"
+    CANVAS_UPDATE = "canvas_update"
+    CANVAS_SCREENSHOT = "canvas_screenshot"
+    CANVAS_DISMISS = "canvas_dismiss"
 
 
 class AgentEvent(BaseModel):
@@ -31,6 +34,9 @@ class AgentEvent(BaseModel):
     message: str = ""
     summary: str = ""
     tokens_before: int = 0
+    html: str = ""
+    url: str = ""
+    image_data: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         match self.type:
@@ -74,3 +80,14 @@ class AgentEvent(BaseModel):
                     "summary": self.summary,
                     "tokens_before": self.tokens_before,
                 }
+            case EventType.CANVAS_UPDATE:
+                d: dict[str, Any] = {"type": "canvas_update"}
+                if self.html:
+                    d["html"] = self.html
+                if self.url:
+                    d["url"] = self.url
+                return d
+            case EventType.CANVAS_SCREENSHOT:
+                return {"type": "canvas_screenshot", "image_data": self.image_data}
+            case EventType.CANVAS_DISMISS:
+                return {"type": "canvas_dismiss"}

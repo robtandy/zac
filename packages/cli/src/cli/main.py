@@ -32,6 +32,8 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_common_options(parser)
     parser.add_argument("--restart-gateway", action="store_true",
                         help="Restart the gateway before connecting")
+    parser.add_argument("--gateway", metavar="URL",
+                        help="Connect to a remote gateway URL (e.g. wss://host:8765) instead of starting a local one")
 
     sub = parser.add_subparsers(dest="command")
 
@@ -87,14 +89,18 @@ def main(argv: list[str] | None = None) -> None:
             parser.parse_args(["gateway", "--help"])
     else:
         # Default: start gateway if needed, then launch TUI
-        use_tls = not args.no_tls
-        opts = _gateway_opts(args)
-        if args.restart_gateway:
-            daemon.restart(**opts)
+        if args.gateway:
+            # Connect to remote gateway — skip local daemon
+            tui.launch(gateway_url=args.gateway)
         else:
-            daemon.start(**opts)
-        tui.launch(
-            host=args.host,
-            port=args.port,
-            use_tls=use_tls,
-        )
+            use_tls = not args.no_tls
+            opts = _gateway_opts(args)
+            if args.restart_gateway:
+                daemon.restart(**opts)
+            else:
+                daemon.start(**opts)
+            tui.launch(
+                host=args.host,
+                port=args.port,
+                use_tls=use_tls,
+            )

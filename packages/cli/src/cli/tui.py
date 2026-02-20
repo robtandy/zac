@@ -13,6 +13,7 @@ def launch(
     host: str = "0.0.0.0",
     port: int = 8765,
     use_tls: bool = True,
+    gateway_url: str | None = None,
     paths: DefaultPaths | None = None,
 ) -> None:
     """Replace the current process with the TUI (npx tsx).
@@ -22,9 +23,10 @@ def launch(
     """
     paths = paths or DefaultPaths()
 
-    scheme = "wss" if use_tls else "ws"
-    # TUI connects to localhost regardless of what host the gateway binds
-    gateway_url = f"{scheme}://localhost:{port}"
+    if gateway_url is None:
+        scheme = "wss" if use_tls else "ws"
+        # TUI connects to localhost regardless of what host the gateway binds
+        gateway_url = f"{scheme}://localhost:{port}"
 
     env = os.environ.copy()
     env["ZAC_GATEWAY_URL"] = gateway_url

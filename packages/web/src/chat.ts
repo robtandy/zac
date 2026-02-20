@@ -42,6 +42,7 @@ export class ChatUI {
   private renderRAF: number | null = null;
   private isCompacting = false;
   private inputQueuedDuringCompaction: string[] = [];
+  private canvasFrame: HTMLIFrameElement | null = null;
 
   constructor(connection: GatewayConnection) {
     this.connection = connection;
@@ -229,6 +230,48 @@ export class ChatUI {
         this.setStatus("Ready");
         break;
       }
+
+      case "canvas_update": {
+        const frame = this.ensureCanvasFrame();
+        if (event.url) {
+          frame.src = event.url;
+        } else if (event.html) {
+          const send = () => frame.contentWindow?.postMessage(
+            { type: "zac:render", html: event.html }, "*"
+          );
+          if (frame.src.includes("canvas-host")) {
+            send();
+          } else {
+            frame.src = "/canvas-host.html";
+            frame.onload = send;
+          }
+        }
+        break;
+      }
+
+      case "canvas_screenshot": {
+        const el = document.createElement("div");
+        el.className = "message tool";
+        const body = document.createElement("div");
+        body.className = "message-body";
+        const img = document.createElement("img");
+        img.src = `data:image/png;base64,${event.image_data}`;
+        img.style.maxWidth = "100%";
+        body.appendChild(img);
+        el.appendChild(body);
+        this.messagesEl.appendChild(el);
+        this.scrollToBottom();
+        break;
+      }
+
+      case "canvas_dismiss": {
+        if (this.canvasFrame) {
+          this.canvasFrame.remove();
+          this.canvasFrame = null;
+          document.getElementById("app")!.classList.remove("with-canvas");
+        }
+        break;
+      }
     }
   }
 
@@ -338,6 +381,19 @@ export class ChatUI {
     el.appendChild(body);
     this.messagesEl.appendChild(el);
     this.scrollToBottom();
+  }
+
+  private ensureCanvasFrame(): HTMLIFrameElement {
+    if (!this.canvasFrame) {
+      const app = document.getElementById("app")!;
+      app.classList.add("with-canvas");
+      const frame = document.createElement("iframe");
+      frame.id = "canvas-frame";
+      frame.src = "/canvas-host.html";
+      app.appendChild(frame);
+      this.canvasFrame = frame;
+    }
+    return this.canvasFrame;
   }
 
   private scrollToBottom(): void {

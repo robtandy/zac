@@ -1,4 +1,4 @@
-import type { EditorTheme, MarkdownTheme, SelectListTheme } from "@mariozechner/pi-tui";
+import type { EditorTheme, ImageTheme, MarkdownTheme, SelectListTheme } from "@mariozechner/pi-tui";
 
 const dim = (s: string) => `\x1b[2m${s}\x1b[22m`;
 const bold = (s: string) => `\x1b[1m${s}\x1b[22m`;
@@ -61,3 +61,5 @@ export const contextToolResultsColor = blue;
 export const contextFreeColor = gray;
 
 export const compactionColor = cyan;
+
+export const imageTheme: ImageTheme = { fallbackColor: gray };

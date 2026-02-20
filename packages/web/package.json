@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --outfile=dist/main.js --format=esm --target=es2022 --minify && cp src/index.html dist/index.html && cp src/styles.css dist/styles.css",
+    "build": "esbuild src/main.ts --bundle --outfile=dist/main.js --format=esm --target=es2022 --minify && cp src/index.html dist/index.html && cp src/styles.css dist/styles.css && cp src/canvas-host.html dist/canvas-host.html",
     "watch": "esbuild src/main.ts --bundle --outfile=dist/main.js --format=esm --target=es2022 --watch"
   },
   "dependencies": {

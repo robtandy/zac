@@ -3,7 +3,7 @@ name = "zac-agent"
 version = "0.1.0"
 description = "Async agent with OpenAI SDK streaming and tool execution"
 requires-python = ">=3.11"
-dependencies = ["openai>=1.0.0"]
+dependencies = ["openai>=1.0.0", "playwright>=1.40.0"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-asyncio>=0.24.0"]

@@ -245,6 +245,13 @@ class AgentClient:
                         result_text = f"Tool execution error: {e}"
                         is_error = True
 
+                # For canvas screenshots, extract base64 data before replacing
+                # result_text so TOOL_END and LLM see a short message, not raw base64
+                canvas_image_data = ""
+                if func_name == "canvas" and not is_error and func_args.get("action") == "screenshot":
+                    canvas_image_data = result_text
+                    result_text = "Screenshot captured."
+
                 yield AgentEvent(
                     type=EventType.TOOL_END,
                     tool_name=func_name,
@@ -252,6 +259,18 @@ class AgentClient:
                     result=result_text,
                     is_error=is_error,
                 )
+
+                # Emit canvas UI events after canvas tool execution
+                if func_name == "canvas" and not is_error:
+                    action = func_args.get("action")
+                    if action == "render":
+                        yield AgentEvent(type=EventType.CANVAS_UPDATE, html=func_args.get("html", ""))
+                    elif action == "navigate":
+                        yield AgentEvent(type=EventType.CANVAS_UPDATE, url=func_args.get("url", ""))
+                    elif action == "screenshot":
+                        yield AgentEvent(type=EventType.CANVAS_SCREENSHOT, image_data=canvas_image_data)
+                    elif action == "dismiss":
+                        yield AgentEvent(type=EventType.CANVAS_DISMISS)
 
                 self._messages.append({
                     "role": "tool",

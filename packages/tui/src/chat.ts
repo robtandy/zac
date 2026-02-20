@@ -1,8 +1,8 @@
 import { execSync } from "child_process";
-import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
+import { TUI, ProcessTerminal, Editor, Image, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
-import { editorTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor } from "./theme.js";
+import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor } from "./theme.js";
 
 const MAX_RESULT_LINES = 20;
 const MAX_RESULT_CHARS = 4000;
@@ -32,6 +32,7 @@ export class ChatUI {
       { name: "context", description: "Show context information" },
       { name: "compact", description: "Compact the conversation history" },
       { name: "reload", description: "Reload the agent and web packages" },
+      { name: "search", description: "Search the web using DuckDuckGo" },
     ];
 
     // Create autocomplete provider for slash commands
@@ -63,6 +64,16 @@ export class ChatUI {
 
       if (trimmed === "/reload") {
         this.connection.send({ type: "steer", message: "/reload" });
+        return;
+      }
+
+      if (trimmed.startsWith("/search ")) {
+        const query = trimmed.slice(8).trim();
+        if (!query) {
+          this.insertBeforeEditor(new Text("Error: No search query provided.", 1, 0, errorColor));
+          return;
+        }
+        this.connection.send({ type: "prompt", message: `/search ${query}` });
         return;
       }
 
@@ -227,6 +238,23 @@ export class ChatUI {
 
       case "context_info":
         this.renderContextBar(event);
+        break;
+
+      case "canvas_update": {
+        const label = event.url ? `Navigated to ${event.url}` : "HTML updated";
+        this.insertBeforeEditor(new Text(`[Canvas: ${label}]`, 0, 0, statusColor));
+        break;
+      }
+
+      case "canvas_screenshot": {
+        this.insertBeforeEditor(new Text("[Canvas screenshot]", 0, 0, statusColor));
+        const img = new Image(event.image_data, "image/png", imageTheme, { maxWidthCells: 80 });
+        this.insertBeforeEditor(img);
+        break;
+      }
+
+      case "canvas_dismiss":
+        this.insertBeforeEditor(new Text("[Canvas dismissed]", 0, 0, statusColor));
         break;
     }
   }

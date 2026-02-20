@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  html, body { margin: 0; padding: 0; height: 100%; background: white; }
+</style></head>
+<body>
+<script>
+  window.addEventListener("message", (e) => {
+    if (e.data?.type === "zac:render") {
+      document.open();
+      document.write(e.data.html);
+      document.close();
+    }
+  });
+</script>
+</body></html>

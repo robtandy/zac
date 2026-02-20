@@ -308,10 +308,13 @@ class SearchWebTool(Tool):
 
 
 def default_tools() -> ToolRegistry:
+    from .canvas_tool import CanvasTool
+
     registry = ToolRegistry()
     registry.register(BashTool())
     registry.register(ReadTool())
     registry.register(WriteTool())
     registry.register(EditTool())
     registry.register(SearchWebTool())
+    registry.register(CanvasTool())
     return registry
