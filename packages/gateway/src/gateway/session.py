@@ -56,7 +56,8 @@ class Session:
                 await self._handle_prompt(msg.message)
             case "steer":
                 logger.debug("Steer: %s", msg.message)
-                await self.agent.steer(msg.message)
+                async for event in self.agent.steer(msg.message):
+                    await self.broadcast(serialize_event(event))
             case "abort":
                 logger.debug("Abort requested")
                 await self.agent.abort()

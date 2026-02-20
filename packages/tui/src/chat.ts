@@ -41,6 +41,11 @@ export class ChatUI {
         return;
       }
 
+      if (trimmed === "/compact") {
+        this.connection.send({ type: "steer", message: "/compact" });
+        return;
+      }
+
       if (trimmed.startsWith("!")) {
         const cmd = trimmed.slice(1).trim();
         if (cmd) this.runShellCommand(cmd);
