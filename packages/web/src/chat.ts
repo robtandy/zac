@@ -158,10 +158,17 @@ export class ChatUI {
         // Could render a context bar; for now just ignore
         break;
 
-      case "compaction_start":
+      case "compaction_start": {
         this.isCompacting = true;
         this.setStatus("Compacting context...");
+        const indicator = document.createElement("div");
+        indicator.className = "compaction-indicator";
+        indicator.id = "compaction-indicator";
+        indicator.innerHTML = '<div class="compaction-spinner"></div>Compacting context...';
+        this.messagesEl.appendChild(indicator);
+        this.scrollToBottom();
         break;
+      }
 
       case "compaction_end": {
         this.isCompacting = false;

@@ -298,6 +298,32 @@ html, body {
   font-weight: 600;
 }
 
+/* Compaction indicator (shown while compacting) */
+.compaction-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px 16px;
+  margin-bottom: 16px;
+  color: var(--accent);
+  font-size: 15px;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.compaction-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Compaction banner */
 .compaction-banner {
   text-align: center;
