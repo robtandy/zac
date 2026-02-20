@@ -1,4 +1,7 @@
-from __future__ import annotations
+# Hashline-based read/edit tools
+# 
+# This implementation is inspired by the "harness problem" and the hashline editing pattern
+# described in https://blog.can.ac/2026/02/12/the-harness-problem/
 
 import asyncio
 import json

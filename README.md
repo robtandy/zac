@@ -10,6 +10,8 @@
 - **Zero-trust actions**: Granular permissions ensure the agent only does what you allow.
 - **Multi-client support**: Use the terminal UI (`tui`) or web interface (`web`).
 - **Manual compaction**: Free up context space with the `/compact` command.
+- **Manual compaction**: Free up context space with the `/compact` command.
+- **Hashline-based editing**: Robust file editing using line hashes (inspired by [Anthropic's editing pattern](https://docs.anthropic.com/en/docs/build-with-claude/file-editing)).
 - **Tool integration**: Extend functionality with custom tools (e.g., file editing, bash commands).
 
 ---
