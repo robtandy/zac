@@ -257,11 +257,15 @@ export class ChatUI {
           const img = new Image(event.image_data, "image/png", imageTheme, { maxWidthCells: 80 });
           this.insertBeforeEditor(img);
         } else {
-          // Inside tmux — save to file, show path
+          // Inside tmux — save to file, display with kitten icat
           const dir = this.screenshotDir ?? (this.screenshotDir = mkdtempSync(join(tmpdir(), "zac-canvas-")));
           const file = join(dir, `screenshot-${Date.now()}.png`);
           writeFileSync(file, Buffer.from(event.image_data, "base64"));
-          this.insertBeforeEditor(new Text(`[Canvas screenshot saved: ${file}]`, 0, 0, statusColor));
+          try {
+            execSync(`kitten icat --transfer-mode=file "${file}"`, { stdio: "inherit", timeout: 5000 });
+          } catch {
+            this.insertBeforeEditor(new Text(`[Canvas screenshot saved: ${file}]`, 0, 0, statusColor));
+          }
         }
         break;
       }
