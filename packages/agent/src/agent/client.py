@@ -27,6 +27,10 @@ _MODEL_CONTEXT_SIZES: dict[str, int] = {
     "mistralai/mistral-large-2512": 128000,
 }
 
+_COMPACTION_THRESHOLD = 0.8
+_KEEP_RECENT_TOKENS = 20000
+_CHARS_PER_TOKEN = 4
+
 
 def _load_system_prompt() -> str:
     path = os.environ.get("ZAC_SYSTEM_PROMPT_FILE")
@@ -108,6 +112,25 @@ class AgentClient:
                 yield AgentEvent(type=EventType.TURN_END)
                 yield AgentEvent(type=EventType.AGENT_END)
                 return
+
+            # Auto-compact if approaching context limit
+            if self._should_compact():
+                yield AgentEvent(type=EventType.COMPACTION_START)
+                try:
+                    summary, tokens_before = await self._compact()
+                    yield AgentEvent(
+                        type=EventType.COMPACTION_END,
+                        summary=summary,
+                        tokens_before=tokens_before,
+                    )
+                except Exception as e:
+                    logger.warning("Compaction failed: %s", e)
+                    yield AgentEvent(
+                        type=EventType.COMPACTION_END,
+                        summary="",
+                        tokens_before=0,
+                        message=f"Compaction failed: {e}",
+                    )
 
             # Call API with retry
             try:
@@ -272,6 +295,67 @@ class AgentClient:
             "tool_results": tool_chars // 4,
             "context_window": _MODEL_CONTEXT_SIZES.get(self._model, 128000),
         }
+
+    def _estimate_tokens(self) -> int:
+        total = len(self._system_prompt) + len(json.dumps(self._tools.schemas()))
+        for msg in self._messages:
+            total += len(json.dumps(msg))
+        return total // _CHARS_PER_TOKEN
+
+    def _should_compact(self) -> bool:
+        context_window = _MODEL_CONTEXT_SIZES.get(self._model, 128000)
+        return self._estimate_tokens() > int(context_window * _COMPACTION_THRESHOLD)
+
+    def _find_cut_point(self) -> int:
+        """Return index of first message to keep. Returns 0 if nothing to cut."""
+        accumulated = 0
+        cut_index = 0
+        for i in range(len(self._messages) - 1, -1, -1):
+            msg = self._messages[i]
+            accumulated += len(json.dumps(msg)) // _CHARS_PER_TOKEN
+            if accumulated >= _KEEP_RECENT_TOKENS:
+                for j in range(i, len(self._messages)):
+                    if self._messages[j]["role"] in ("user", "assistant"):
+                        cut_index = j
+                        break
+                break
+        return cut_index
+
+    async def _compact(self) -> tuple[str, int]:
+        """Summarize old messages and replace them. Returns (summary, tokens_before)."""
+        tokens_before = self._estimate_tokens()
+        cut = self._find_cut_point()
+        if cut <= 0:
+            return "", tokens_before
+
+        old_messages = self._messages[:cut]
+        kept_messages = self._messages[cut:]
+
+        summary_prompt = [
+            {"role": "system", "content": (
+                "Summarize the following conversation history. "
+                "Cover: the user's goal, progress made, key decisions, "
+                "files read/modified, and what the next steps were. "
+                "Be concise but preserve all important context."
+            )},
+            *old_messages,
+            {"role": "user", "content": "Summarize the conversation so far."},
+        ]
+
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=summary_prompt,
+            stream=False,
+        )
+        summary = response.choices[0].message.content or "No summary generated."
+
+        self._messages = [
+            {"role": "user", "content": f"[Previous conversation summary]\n{summary}"},
+            {"role": "assistant", "content": "Understood. I have the context from our previous conversation. How can I help?"},
+            *kept_messages,
+        ]
+
+        return summary, tokens_before
 
     async def abort(self) -> None:
         self._abort_event.set()

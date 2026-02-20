@@ -45,6 +45,7 @@ export const markdownTheme: MarkdownTheme = {
 };
 
 export const statusColor = gray;
+export const statusBarColor = dim;
 export const errorColor = red;
 export const userMsgColor = green;
 export const toolColor = yellow;
@@ -58,3 +59,5 @@ export const contextUserColor = green;
 export const contextAssistantColor = magenta;
 export const contextToolResultsColor = blue;
 export const contextFreeColor = gray;
+
+export const compactionColor = cyan;

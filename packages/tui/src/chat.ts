@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
-import { editorTheme, markdownTheme, statusColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor } from "./theme.js";
+import { editorTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor } from "./theme.js";
 
 const MAX_RESULT_LINES = 20;
 const MAX_RESULT_CHARS = 4000;
@@ -15,6 +15,9 @@ export class ChatUI {
   private currentText = "";
   private currentToolMarkdown: Markdown | null = null;
   private currentToolText = "";
+  private statusBar: Text;
+  private inputQueuedDuringCompaction: string[] = [];
+  private isCompacting = false;
 
   constructor(connection: GatewayConnection) {
     this.connection = connection;
@@ -44,6 +47,12 @@ export class ChatUI {
         return;
       }
 
+      if (this.isCompacting) {
+        this.inputQueuedDuringCompaction.push(trimmed);
+        this.insertBeforeEditor(new Text(`[Queued] > ${trimmed}`, 1, 0, statusColor));
+        return;
+      }
+
       // Send to gateway (user_message event will come back via broadcast)
       this.connection.send({ type: "prompt", message: trimmed });
       this.currentText = "";
@@ -51,6 +60,8 @@ export class ChatUI {
     };
 
     this.tui.addChild(this.editor);
+    this.statusBar = new Text("", 1, 0, statusBarColor);
+    this.tui.addChild(this.statusBar);
     this.tui.setFocus(this.editor);
 
     this.tui.addInputListener((data: string) => {
@@ -82,16 +93,19 @@ export class ChatUI {
       case "turn_start":
         this.currentText = "";
         this.currentMarkdown = null;
+        this.setStatus("Thinking...");
         break;
 
       case "text_delta":
         this.currentText += event.delta;
         this.updateMarkdown();
+        this.setStatus("Responding...");
         break;
 
       case "tool_start": {
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
+        this.setStatus(`Running tool: ${event.tool_name}`);
         const header = this.formatToolHeader(event.tool_name, event.args);
         this.insertBeforeEditor(new Text(header, 1, 0, toolColor));
         if (event.tool_name === "edit") {
@@ -128,13 +142,42 @@ export class ChatUI {
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
         this.insertBeforeEditor(new Spacer(1));
+        this.setStatus("Ready");
         break;
 
       case "error":
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
         this.insertBeforeEditor(new Text(`Error: ${event.message}`, 1, 0, errorColor));
+        this.setStatus("Error");
         break;
+
+      case "compaction_start":
+        this.isCompacting = true;
+        this.setStatus("Compacting context...");
+        break;
+
+      case "compaction_end": {
+        this.isCompacting = false;
+        // Clear all chat children (everything before editor)
+        const children = this.tui.children;
+        const editorIdx = children.indexOf(this.editor);
+        children.splice(0, editorIdx);
+        // Show compaction summary
+        if (event.summary) {
+          const header = `[Compacted from ${event.tokens_before.toLocaleString()} tokens]`;
+          this.insertBeforeEditor(new Text(header, 1, 0, compactionColor));
+          this.insertBeforeEditor(new Spacer(1));
+        }
+        this.setStatus("Ready");
+        this.tui.requestRender();
+        // Flush queued input
+        for (const msg of this.inputQueuedDuringCompaction) {
+          this.connection.send({ type: "prompt", message: msg });
+        }
+        this.inputQueuedDuringCompaction = [];
+        break;
+      }
 
       case "context_info":
         this.renderContextBar(event);
@@ -320,6 +363,19 @@ export class ChatUI {
     this.insertBeforeEditor(new Text(legend, 0, 0));
     this.insertBeforeEditor(new Text(summary, 0, 0, statusColor));
     this.insertBeforeEditor(new Spacer(1));
+  }
+
+  private setStatus(text: string): void {
+    this.statusBar.setText(text);
+    this.tui.requestRender();
+  }
+
+  setConnected(connected: boolean): void {
+    if (connected) {
+      this.setStatus("Ready");
+    } else {
+      this.setStatus("Reconnecting...");
+    }
   }
 
   start(): void {

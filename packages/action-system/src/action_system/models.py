@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class ActionStatus(Enum):
@@ -24,8 +25,7 @@ class Expiration(Enum):
     INDEFINITE = "indefinite"
 
 
-@dataclass
-class PermissionDef:
+class PermissionDef(BaseModel):
     """A permission defined by a handler.
 
     Permissions are fine-grained and parameterized. The `parameters` dict
@@ -36,20 +36,19 @@ class PermissionDef:
     name: str
     description: str
     handler_id: str = ""
-    parameters: dict[str, str] = field(default_factory=dict)
+    parameters: dict[str, str] = Field(default_factory=dict)
 
 
-@dataclass
-class PermissionGrant:
+class PermissionGrant(BaseModel):
     """A granted permission with optional scope and expiration."""
 
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     permission_name: str = ""
     handler_id: str = ""
-    scope: dict[str, Any] = field(default_factory=dict)
+    scope: dict[str, Any] = Field(default_factory=dict)
     expiration: Expiration = Expiration.INDEFINITE
     expires_at: datetime | None = None
-    granted_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    granted_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     granted_by: str = "user"
 
     def is_expired(self) -> bool:
@@ -58,25 +57,23 @@ class PermissionGrant:
         return datetime.now(timezone.utc) >= self.expires_at
 
 
-@dataclass
-class ActionRequest:
+class ActionRequest(BaseModel):
     """A request to execute an action."""
 
-    id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
     handler_id: str = ""
     action_name: str = ""
-    params: dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
     permission_name: str = ""
-    permission_scope: dict[str, Any] = field(default_factory=dict)
+    permission_scope: dict[str, Any] = Field(default_factory=dict)
     status: ActionStatus = ActionStatus.PENDING
     result: Any = None
     error: str | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
 
-@dataclass
-class ActionResult:
+class ActionResult(BaseModel):
     """Result returned from requesting an action."""
 
     action_id: str

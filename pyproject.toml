@@ -5,7 +5,7 @@ requires-python = ">=3.11"
 
 [tool.uv.workspace]
 members = ["packages/*"]
-exclude = ["packages/tui"]
+exclude = ["packages/tui", "packages/web"]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/*/tests"]
@@ -14,4 +14,14 @@ testpaths = ["packages/*/tests"]
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=0.24.0",
+    "zac-agent",
+    "zac-gateway",
+    "zac-action-system",
+    "zac-cli",
 ]
+
+[tool.uv.sources]
+zac-agent = { workspace = true }
+zac-gateway = { workspace = true }
+zac-action-system = { workspace = true }
+zac-cli = { workspace = true }

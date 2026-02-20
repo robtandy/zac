@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class EventType(Enum):
@@ -14,19 +15,22 @@ class EventType(Enum):
     TURN_END = "turn_end"
     AGENT_END = "agent_end"
     ERROR = "error"
+    COMPACTION_START = "compaction_start"
+    COMPACTION_END = "compaction_end"
 
 
-@dataclass
-class AgentEvent:
+class AgentEvent(BaseModel):
     type: EventType
     delta: str = ""
     tool_name: str = ""
     tool_call_id: str = ""
-    args: dict[str, Any] = field(default_factory=dict)
+    args: dict[str, Any] = Field(default_factory=dict)
     result: str = ""
     partial_result: str = ""
     is_error: bool = False
     message: str = ""
+    summary: str = ""
+    tokens_before: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         match self.type:
@@ -62,3 +66,11 @@ class AgentEvent:
                 return {"type": "agent_end"}
             case EventType.ERROR:
                 return {"type": "error", "message": self.message}
+            case EventType.COMPACTION_START:
+                return {"type": "compaction_start"}
+            case EventType.COMPACTION_END:
+                return {
+                    "type": "compaction_end",
+                    "summary": self.summary,
+                    "tokens_before": self.tokens_before,
+                }

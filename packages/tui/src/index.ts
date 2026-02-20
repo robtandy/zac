@@ -2,7 +2,7 @@ import { GatewayConnection } from "./connection.js";
 import { ChatUI } from "./chat.js";
 import type { ServerEvent } from "./protocol.js";
 
-const url = process.env.ZAC_GATEWAY_URL ?? "ws://localhost:8765";
+const url = process.env.ZAC_GATEWAY_URL ?? "wss://localhost:8765";
 
 let chatUI: ChatUI | null = null;
 
@@ -12,10 +12,10 @@ const connection = new GatewayConnection({
     chatUI?.handleEvent(event);
   },
   onConnect: () => {
-    // Connection established
+    chatUI?.setConnected(true);
   },
   onDisconnect: () => {
-    // Will auto-reconnect
+    chatUI?.setConnected(false);
   },
 });
 
