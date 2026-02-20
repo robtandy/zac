@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -279,29 +280,39 @@ class SearchWebTool(Tool):
         if not query:
             return ToolResult(output="No query provided.", is_error=True)
 
-        url = f"https://api.duckduckgo.com/?q={query}&format=json&no_redirect=1"
+        # Note: no_redirect=1 suppresses abstract text and related topics, so we don't use it
+        url = f"https://api.duckduckgo.com/?q={query}&format=json"
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(url)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 results = []
-                if data.get("AbstractText"):
-                    results.append(f"**Summary**: {data["AbstractText"]}")
+                # Check both Abstract and AbstractText (API returns either depending on query)
+                abstract = data.get("Abstract") or data.get("AbstractText")
+                if abstract:
+                    results.append(f"**Summary**: {abstract}")
                 if data.get("Answer"):
                     results.append(f"**Answer**: {data["Answer"]}")
                 if data.get("RelatedTopics"):
                     for topic in data["RelatedTopics"][:3]:  # Limit to 3 topics
-                        if "Text" in topic:
-                            results.append(f"- {topic["Text"]}")
+                        # API returns "Result" key, not "Text"
+                        if "Result" in topic:
+                            # Strip HTML tags from result
+                            text = topic["Result"]
+                            text = re.sub(r"<[^>]+>", "", text)
+                            results.append(f"- {text}")
                         elif "Topics" in topic:
                             for subtopic in topic["Topics"][:2]:  # Limit to 2 subtopics
-                                results.append(f"- {subtopic["Text"]}")
-                
+                                if "Result" in subtopic:
+                                    text = subtopic["Result"]
+                                    text = re.sub(r"<[^>]+>", "", text)
+                                    results.append(f"- {text}")
+
                 if not results:
                     return ToolResult(output="No results found.")
-                
+
                 return ToolResult(output="\n".join(results))
         except Exception as e:
             return ToolResult(output=f"Failed to search: {e}", is_error=True)
