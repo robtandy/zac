@@ -66,6 +66,7 @@ def start(
     model: str | None = None,
     log_file: str | None = None,
     log_level: str = "info",
+    api_key: str | None = None,
     paths: DefaultPaths | None = None,
 ) -> int:
     """Start the gateway as a background daemon. Returns the PID."""
@@ -104,11 +105,13 @@ def start(
     if model:
         cmd.extend(["--model", model])
 
-    # Environment: pass system prompt file
+    # Environment: pass system prompt file and API key
     env = os.environ.copy()
     prompt_file = system_prompt_file or str(paths.system_prompt)
     if Path(prompt_file).is_file():
         env["ZAC_SYSTEM_PROMPT_FILE"] = prompt_file
+    if api_key:
+        env["OPENROUTER_API_KEY"] = api_key
 
     proc = subprocess.Popen(
         cmd,
