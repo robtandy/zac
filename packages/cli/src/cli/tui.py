@@ -4,8 +4,25 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 
 from .paths import DefaultPaths
+
+
+def _ensure_node_modules(paths: DefaultPaths) -> None:
+    """Run npm install if node_modules is missing."""
+    tui_dir = paths.tui_entry.parent.parent
+    if not (tui_dir / "node_modules").is_dir():
+        print("Installing TUI dependencies...")
+        result = subprocess.run(
+            ["npm", "install"],
+            cwd=str(tui_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"npm install failed: {result.stderr}")
+        print("TUI dependencies installed.")
 
 
 def launch(
@@ -22,6 +39,9 @@ def launch(
     direct terminal control and clean signal handling.
     """
     paths = paths or DefaultPaths()
+
+    # Ensure node_modules is installed before launching
+    _ensure_node_modules(paths)
 
     if gateway_url is None:
         scheme = "wss" if use_tls else "ws"

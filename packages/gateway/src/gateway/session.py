@@ -28,6 +28,21 @@ def _find_web_dir() -> Path | None:
     return None
 
 
+def _ensure_web_node_modules(web_dir: Path) -> None:
+    """Run npm install if node_modules is missing in the web directory."""
+    if not (web_dir / "node_modules").is_dir():
+        logger.info("Installing web dependencies...")
+        result = subprocess.run(
+            ["npm", "install"],
+            cwd=str(web_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"npm install failed: {result.stderr}")
+        logger.info("Web dependencies installed.")
+
+
 class Session:
     """Binds connected WebSocket clients to a single agent instance.
 
@@ -138,6 +153,9 @@ class Session:
         web_dir = _find_web_dir()
         if web_dir:
             try:
+                # Ensure dependencies are installed first
+                _ensure_web_node_modules(web_dir)
+
                 result = await asyncio.to_thread(
                     subprocess.run,
                     ["npm", "run", "build"],

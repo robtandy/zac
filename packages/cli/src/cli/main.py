@@ -37,6 +37,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command")
 
+    actions = sub.add_parser("actions-server", help="Start the action-system server")
+    actions.add_argument("--port", type=int, default=8000, help="Port for the action-system server (default: 8000)")
     gw = sub.add_parser("gateway", help="Manage the gateway daemon")
     gw_sub = gw.add_subparsers(dest="gateway_action")
 

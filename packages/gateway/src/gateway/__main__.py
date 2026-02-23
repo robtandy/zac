@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import subprocess
 from pathlib import Path
 
 from gateway.server import DEFAULT_HOST, DEFAULT_PORT, run
@@ -16,6 +17,32 @@ def _find_web_dist() -> str | None:
     return None
 
 
+def _find_web_dir() -> Path | None:
+    """Find packages/web directory by walking up from this file."""
+    here = Path(__file__).resolve().parent
+    for ancestor in (here, *here.parents):
+        candidate = ancestor / "packages" / "web"
+        if candidate.is_dir() and (candidate / "package.json").is_file():
+            return candidate
+    return None
+
+
+def _ensure_web_node_modules() -> None:
+    """Run npm install if node_modules is missing in the web directory."""
+    web_dir = _find_web_dir()
+    if web_dir and not (web_dir / "node_modules").is_dir():
+        print("Installing web dependencies...")
+        result = subprocess.run(
+            ["npm", "install"],
+            cwd=str(web_dir),
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"npm install failed: {result.stderr}")
+        print("Web dependencies installed.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Zac Gateway Server")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Bind address (default: localhost)")
@@ -29,6 +56,9 @@ def main() -> None:
     parser.add_argument("--model", help="OpenRouter model ID (e.g. anthropic/claude-sonnet-4)")
     parser.add_argument("--system-prompt", help="System prompt for the agent")
     args = parser.parse_args()
+
+    # Ensure web dependencies are installed before starting
+    _ensure_web_node_modules()
 
     web_dir = args.web_dir
     if not web_dir and not args.no_web:
