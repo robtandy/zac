@@ -85,11 +85,16 @@ def start(
         cmd.append("--debug")
 
     # TLS
-    if not no_tls:
+    use_tls = not no_tls
+    if use_tls:
         cert = tls_cert or str(paths.tls_cert)
         key = tls_key or str(paths.tls_key)
         if Path(cert).is_file() and Path(key).is_file():
             cmd.extend(["--tls-cert", cert, "--tls-key", key])
+        else:
+            # Certs don't exist, fall back to no TLS
+            cmd.append("--no-tls")
+            use_tls = False
 
     # Set up logging - null by default, or log file if specified
     if log_file:

@@ -218,13 +218,24 @@ def main(argv: list[str] | None = None) -> None:
         else:
             # Launch a gateway then connect
             import random
+            from pathlib import Path
 
             # Choose a random port for the gateway
             random_port = random.randint(49152, 65535)
             use_tls = not args.no_tls
+            
+            # Check if TLS certs actually exist
+            if use_tls:
+                cert = args.tls_cert or str(paths.tls_cert)
+                key = args.tls_key or str(paths.tls_key)
+                if not (Path(cert).is_file() and Path(key).is_file()):
+                    use_tls = False
+            
             opts = _gateway_opts(args, api_key)
             opts["port"] = random_port  # Override port with random port
             opts["daemon_mode"] = False
+            if not use_tls:
+                opts["no_tls"] = True
 
             pid = None
             try:
