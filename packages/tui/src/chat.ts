@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { TUI, ProcessTerminal, Editor, Image, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
-import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor } from "./theme.js";
+import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black } from "./theme.js";
 
 const MAX_RESULT_LINES = 20;
 const MAX_RESULT_CHARS = 4000;
@@ -575,20 +575,41 @@ export class ChatUI {
   private setStatus(text: string): void {
     const cwd = process.cwd();
     const dirName = cwd.split(/[\/]/).pop() || cwd;
-    const middle = ` | Reasoning: ${this.reasoningEffort}`;
-    const left = `${text} | ${dirName}${middle}`;
+
+    // Apply a uniform background to the entire status bar (tmux-compatible)
+    const uniformBg = (s: string) => `\x1b[48;5;240m${s}\x1b[0m`; // Gray background
+    const labelStyle = (s: string) => `\x1b[36m${s}\x1b[39m`; // Cyan text for labels (readable on gray)
+    const valueStyle = (s: string) => `\x1b[37m${s}\x1b[39m`; // White text for values
+
+    // Format labeled values
+    const statusLabel = labelStyle(" status ");
+    const statusText = valueStyle(` ${text} `);
+    
+    const pwdLabel = labelStyle(" pwd ");
+    const pwdText = valueStyle(` ${dirName} `);
+    
+    const reasoningLabel = labelStyle(" reasoning ");
+    const reasoningText = valueStyle(` ${this.reasoningEffort} `);
+    
+    const modelLabel = labelStyle(" model ");
+    const modelText = this.currentModel ? valueStyle(` ${this.currentModel} `) : "";
+
+    // First row: Status, pwd, Reasoning
+    const firstRow = [
+      `${statusLabel}${statusText}`,
+      `${pwdLabel}${pwdText}`,
+      `${reasoningLabel}${reasoningText}`,
+    ].join("  ");
+    
+    // Second row: Model (if it exists)
+    let secondRow = "";
     if (this.currentModel) {
-      const cols = process.stdout.columns || 80;
-      const right = this.currentModel;
-      const gap = cols - left.length - right.length;
-      if (gap > 2) {
-        this.statusBar.setText(left + " ".repeat(gap) + right);
-      } else {
-        this.statusBar.setText(left + "  " + right);
-      }
-    } else {
-      this.statusBar.setText(left);
+      secondRow = `${modelLabel}${modelText}`;
     }
+    
+    // Combine rows
+    const statusBarText = secondRow ? `${firstRow}\n${secondRow}` : firstRow;
+    this.statusBar.setText(statusBarText);
     this.tui.requestRender();
   }
 
