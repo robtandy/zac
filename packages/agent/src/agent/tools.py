@@ -1,13 +1,12 @@
-# Hashline-based read/edit tools
+# Edit/read tools inspired by pi-mono
 #
-# This implementation is inspired by the "harness problem" and the hashline editing pattern
-# described in https://blog.can.ac/2026/02/12/the-harness-problem/
+# This implementation follows the pi-mono coding-agent approach:
+# - Edit: find and replace exact text (with fuzzy matching for minor whitespace differences)
+# - Read: offset/limit with truncation
 
 import asyncio
-import json
-import os
+import difflib
 import re
-import zlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -19,6 +18,9 @@ from pydantic import BaseModel, Field
 class ToolResult(BaseModel):
     output: str
     is_error: bool = False
+    # For edit tool - contains the diff and first changed line
+    diff: str | None = None
+    first_changed_line: int | None = None
 
 
 class ToolDefinition(BaseModel):
@@ -63,23 +65,191 @@ class ToolRegistry:
 _MAX_OUTPUT = 30_000
 _BASH_TIMEOUT = 120
 
-
-def _hash_line(content: str) -> str:
-    """Generate a short hash for a line of content."""
-    # Use CRC32 for speed, take 2 hex chars (can also use 3)
-    hash_val = format(zlib.crc32(content.encode()) & 0xFFFF, "x")
-    # Ensure the hash is always 2 characters long
-    return hash_val.zfill(2)[:2]
+# Default truncation limits (matching pi-mono's truncate.ts)
+DEFAULT_MAX_LINES = 500
+DEFAULT_MAX_BYTES = 100 * 1024  # 100KB
 
 
-def _parse_hashline(line: str) -> tuple[int, str, str] | None:
-    """Parse a hashline in format 'line:hash|content'."""
-    # Match pattern: number:hash|content
-    match = re.match(r"^(\d+):([0-9a-f]+)\|(.*)$", line)
-    if match:
-        return int(match.group(1)), match.group(2), match.group(3)
-    return None
+# === Fuzzy matching and diff utilities (from pi-mono) ===
 
+def normalize_to_lf(text: str) -> str:
+    """Normalize line endings to LF."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def detect_line_ending(content: str) -> str:
+    """Detect the line ending used in content."""
+    crlf_idx = content.find("\r\n")
+    lf_idx = content.find("\n")
+    if lf_idx == -1:
+        return "\n"
+    if crlf_idx == -1:
+        return "\n"
+    return "\r\n" if crlf_idx < lf_idx else "\n"
+
+
+def restore_line_endings(text: str, ending: str) -> str:
+    """Restore line endings to the original format."""
+    if ending == "\r\n":
+        return text.replace("\n", "\r\n")
+    return text
+
+
+def normalize_for_fuzzy_match(text: str) -> str:
+    """
+    Normalize text for fuzzy matching. Applies progressive transformations:
+    - Strip trailing whitespace from each line
+    - Normalize smart quotes to ASCII equivalents
+    - Normalize Unicode dashes/hyphens to ASCII hyphen
+    - Normalize special Unicode spaces to regular space
+    """
+    result = text
+    # Strip trailing whitespace per line
+    result = "\n".join(line.rstrip() for line in result.split("\n"))
+    # Smart single quotes → '
+    result = re.sub(r"[\u2018\u2019\u201A\u201B]", "'", result)
+    # Smart double quotes → "
+    result = re.sub(r"[\u201C\u201D\u201E\u201F]", '"', result)
+    # Various dashes/hyphens → -
+    result = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]", "-", result)
+    # Special spaces → regular space
+    result = re.sub(r"[\u00A0\u2002-\u200A\u202F\u205F\u3000]", " ", result)
+    return result
+
+
+def fuzzy_find_text(content: str, old_text: str) -> tuple[bool, int, int, str]:
+    """
+    Find oldText in content, trying exact match first, then fuzzy match.
+    Returns: (found, index, match_length, content_for_replacement)
+    """
+    # Try exact match first
+    exact_index = content.find(old_text)
+    if exact_index != -1:
+        return (True, exact_index, len(old_text), content)
+
+    # Try fuzzy match
+    fuzzy_content = normalize_for_fuzzy_match(content)
+    fuzzy_old_text = normalize_for_fuzzy_match(old_text)
+    fuzzy_index = fuzzy_content.find(fuzzy_old_text)
+
+    if fuzzy_index == -1:
+        return (False, -1, 0, content)
+
+    return (True, fuzzy_index, len(fuzzy_old_text), fuzzy_content)
+
+
+def generate_diff_string(old_content: str, new_content: str, context_lines: int = 4) -> tuple[str, int | None]:
+    """
+    Generate a unified diff string with line numbers and context.
+    Returns: (diff_string, first_changed_line)
+    """
+    old_lines = old_content.split("\n")
+    new_lines = new_content.split("\n")
+
+    # Use Python's difflib
+    diff = difflib.unified_diff(
+        old_lines,
+        new_lines,
+        lineterm="",
+        n=context_lines,
+    )
+
+    output: list[str] = []
+    old_line_num = 1
+    new_line_num = 1
+    first_changed_line: int | None = None
+
+    for line in diff:
+        if line.startswith("+++") or line.startswith("---") or line.startswith("@@"):
+            # Parse the hunk header to get line numbers
+            match = re.match(r"@@ -(\d+),?\d* \+(\d+),?\d* @@", line)
+            if match:
+                old_line_num = int(match.group(1))
+                new_line_num = int(match.group(2))
+            output.append(line)
+        elif line.startswith("+"):
+            if first_changed_line is None:
+                first_changed_line = new_line_num
+            output.append(f"{new_line_num:4d} {line}")
+            new_line_num += 1
+        elif line.startswith("-"):
+            if first_changed_line is None:
+                first_changed_line = new_line_num
+            output.append(f"{old_line_num:4d} {line}")
+            old_line_num += 1
+        else:
+            output.append(f"{old_line_num:4d} {line}")
+            old_line_num += 1
+            new_line_num += 1
+
+    return ("\n".join(output), first_changed_line)
+
+
+def strip_bom(content: str) -> tuple[str, str]:
+    """Strip UTF-8 BOM if present. Returns (bom, text_without_bom)."""
+    if content.startswith("\ufeff"):
+        return ("\ufeff", content[1:])
+    return ("", content)
+
+
+# === Truncation utilities ===
+
+def format_size(bytes_count: int) -> str:
+    """Format bytes as human-readable size."""
+    if bytes_count < 1024:
+        return f"{bytes_count}B"
+    elif bytes_count < 1024 * 1024:
+        return f"{bytes_count / 1024:.1f}KB"
+    else:
+        return f"{bytes_count / (1024 * 1024):.1f}MB"
+
+
+def truncate_head(
+    content: str,
+    max_lines: int = DEFAULT_MAX_LINES,
+    max_bytes: int = DEFAULT_MAX_BYTES,
+) -> tuple[str, bool, str | None, int, int]:
+    """
+    Truncate content from the head (keep first N lines/bytes).
+    Returns: (truncated_content, was_truncated, truncated_by_reason, total_lines, output_lines)
+    """
+    total_bytes = len(content.encode("utf-8"))
+    lines = content.split("\n")
+    total_lines = len(lines)
+
+    # Check if no truncation needed
+    if total_lines <= max_lines and total_bytes <= max_bytes:
+        return (content, False, None, total_lines, total_lines)
+
+    # Check if first line alone exceeds byte limit
+    first_line_bytes = len(lines[0].encode("utf-8"))
+    if first_line_bytes > max_bytes:
+        return ("", True, "first_line_exceeds_limit", total_lines, 0)
+
+    # Collect complete lines that fit
+    output_lines: list[str] = []
+    output_bytes_count = 0
+    truncated_by: str | None = None
+
+    for i, line in enumerate(lines):
+        if i >= max_lines:
+            truncated_by = "lines"
+            break
+
+        line_bytes = len(line.encode("utf-8")) + (1 if i > 0 else 0)  # +1 for newline
+
+        if output_bytes_count + line_bytes > max_bytes:
+            truncated_by = "bytes"
+            break
+
+        output_lines.append(line)
+        output_bytes_count += line_bytes
+
+    output_content = "\n".join(output_lines)
+    return (output_content, truncated_by is not None, truncated_by, total_lines, len(output_lines))
+
+
+# === Tool implementations ===
 
 class BashTool(Tool):
     def definition(self) -> ToolDefinition:
@@ -134,64 +304,107 @@ class ReadTool(Tool):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name="read",
-            description="""
-Read a file and return its contents with line numbers and content hashes.
-
-Output format:
-  line_number:hash|content
-
-Example output:
-  1:a3|def example() {
-  2:f1|    print("Hello, world!");
-  3:0e|}
-
-Key details:
-- Each line is prefixed with its 1-based line number and a 2-character hash of its content.
-- The hash is deterministic (CRC32) and used to reference lines for editing.
-- Empty lines are included in the output (e.g., "5:00|").
-- Use this output to identify lines for the `edit` tool.
-
-Parameters:
-- file_path: Absolute path to the file to read.
-
-Example usage:
-  {"file_path": "/path/to/file.py"}
-""",
+            description=f"""Read the contents of a file. Output is truncated to {DEFAULT_MAX_LINES} lines or {format_size(DEFAULT_MAX_BYTES)} (whichever is hit first). Use offset/limit for large files.""",
             parameters={
                 "type": "object",
                 "properties": {
-                    "file_path": {
+                    "path": {
                         "type": "string",
-                        "description": "Absolute path to the file to read.",
+                        "description": "Path to the file to read (relative or absolute).",
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line number to start reading from (1-indexed).",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines to read.",
                     },
                 },
-                "required": ["file_path"],
+                "required": ["path"],
             },
         )
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        file_path = args.get("file_path", "")
+        path = args.get("path", "")
+        offset = args.get("offset")  # 1-indexed, optional
+        limit = args.get("limit")  # optional
 
-        if not file_path:
-            return ToolResult(output="No file_path provided.", is_error=True)
+        if not path:
+            return ToolResult(output="No path provided.", is_error=True)
+
         try:
-            path = Path(file_path)
-            text = path.read_text()
+            file_path = Path(path)
+            raw_content = file_path.read_text()
         except FileNotFoundError:
-            return ToolResult(output=f"File not found: {file_path}", is_error=True)
+            return ToolResult(output=f"File not found: {path}", is_error=True)
         except OSError as e:
             return ToolResult(output=f"Error reading file: {e}", is_error=True)
 
-        lines = text.splitlines(keepends=True)
+        # Strip BOM before processing
+        _, content = strip_bom(raw_content)
 
-        # Output format: line:hash|content
-        numbered = []
-        for i, line in enumerate(lines, start=1):
-            # Remove trailing whitespace for hashing but keep the actual content
-            content = line.rstrip("\n\r")
-            hash_val = _hash_line(content)
-            numbered.append(f"{i}:{hash_val}|{content}")
-        return ToolResult(output="\n".join(numbered))
+        # Normalize line endings
+        original_ending = detect_line_ending(content)
+        content = normalize_to_lf(content)
+
+        all_lines = content.split("\n")
+        total_file_lines = len(all_lines)
+
+        # Apply offset (1-indexed to 0-indexed)
+        start_line = (offset - 1) if offset else 0
+        start_line = max(0, start_line)
+
+        # Check if offset is out of bounds
+        if start_line >= total_file_lines:
+            return ToolResult(
+                output=f"Offset {offset} is beyond end of file ({total_file_lines} lines total)",
+                is_error=True,
+            )
+
+        # Get the content to truncate
+        if limit is not None:
+            end_line = min(start_line + limit, total_file_lines)
+            selected_content = "\n".join(all_lines[start_line:end_line])
+            user_limited_lines = end_line - start_line
+        else:
+            selected_content = "\n".join(all_lines[start_line:])
+            user_limited_lines = None
+
+        # Apply truncation
+        (
+            truncated_content,
+            was_truncated,
+            truncated_reason,
+            total_lines,
+            output_lines,
+        ) = truncate_head(selected_content)
+
+        start_line_display = start_line + 1  # For display (1-indexed)
+
+        if was_truncated and truncated_reason == "first_line_exceeds_limit":
+            first_line_size = format_size(len(all_lines[start_line].encode("utf-8")))
+            output = f"[Line {start_line_display} is {first_line_size}, exceeds {format_size(DEFAULT_MAX_BYTES)} limit. Use bash: sed -n '{start_line_display}p' {path} | head -c {DEFAULT_MAX_BYTES}]"
+        elif was_truncated:
+            end_line_display = start_line_display + output_lines - 1
+            next_offset = end_line_display + 1
+
+            output = truncated_content
+            if truncated_reason == "lines":
+                output += f"\n\n[Showing lines {start_line_display}-{end_line_display} of {total_file_lines}. Use offset={next_offset} to continue.]"
+            else:
+                output += f"\n\n[Showing lines {start_line_display}-{end_line_display} of {total_file_lines} ({format_size(DEFAULT_MAX_BYTES)} limit). Use offset={next_offset} to continue.]"
+        elif user_limited_lines is not None and start_line + user_limited_lines < total_file_lines:
+            # User specified limit, there's more content, but no truncation
+            remaining = total_file_lines - (start_line + user_limited_lines)
+            next_offset = start_line + user_limited_lines + 1
+
+            output = truncated_content
+            output += f"\n\n[{remaining} more lines in file. Use offset={next_offset} to continue.]"
+        else:
+            output = truncated_content
+
+        return ToolResult(output=output)
 
 
 class WriteTool(Tool):
@@ -235,224 +448,119 @@ class EditTool(Tool):
         return ToolDefinition(
             name="edit",
             description="""
-Find and replace text in a file using content hashes from the `read` tool.
-
-Key details:
-- Use the `read` tool first to get line numbers and hashes.
-- The hash ensures the line hasn't changed since reading.
-- If the hash doesn't match, the edit fails explicitly (no silent corruption).
-
-Supported formats:
-1. Single-line edit: Replace a single line using its hash.
-   Format: "line_number:hash"
-   Example: "42:ab"
-
-2. Range edit: Replace multiple lines using a range of hashes.
-   Format: "start_line:start_hash-end_line:end_hash"
-   Example: "10:ab-15:cd"
+Edit a file by replacing exact text. The oldText must match exactly (including whitespace). Uses fuzzy matching to handle minor differences in whitespace, quotes, and dashes.
 
 Parameters:
-- file_path: Absolute path to the file to edit.
-- hash: Line reference (single line or range).
-- new_text: The replacement text.
+- path: Path to the file to edit (relative or absolute)
+- oldText: Exact text to find and replace
+- newText: New text to replace the old text with
 
-Example usage (single line):
-  {
-    "file_path": "/path/to/file.py",
-    "hash": "42:ab",
-    "new_text": "    print('Updated line')"
-  }
-
-Example usage (range):
-  {
-    "file_path": "/path/to/file.py",
-    "hash": "10:ab-15:cd",
-    "new_text": "def new_function():\n    return True"
-  }
+The tool returns a diff of the changes made.
 """,
             parameters={
                 "type": "object",
                 "properties": {
-                    "file_path": {
+                    "path": {
                         "type": "string",
-                        "description": "Absolute path to the file to edit.",
+                        "description": "Path to the file to edit (relative or absolute).",
                     },
-                    "hash": {
+                    "oldText": {
                         "type": "string",
-                        "description": "Line reference in format 'line:hash' (e.g., '42:ab') or range 'start:end' (e.g., '10:ab-15:cd'). Use the hash from read output.",
+                        "description": "Exact text to find and replace (must match exactly).",
                     },
-                    "new_text": {
+                    "newText": {
                         "type": "string",
-                        "description": "The replacement text.",
+                        "description": "New text to replace the old text with.",
                     },
                 },
-                "required": ["file_path", "hash", "new_text"],
+                "required": ["path", "oldText", "newText"],
             },
         )
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        file_path = args.get("file_path", "")
-        hash_ref = args.get("hash", "")
-        new_text = args.get("new_text", "")
+        path = args.get("path", "")
+        old_text = args.get("oldText", "")
+        new_text = args.get("newText", "")
 
-        if not file_path:
-            return ToolResult(output="No file_path provided.", is_error=True)
-        if not hash_ref:
-            return ToolResult(
-                output="No hash provided. Use format 'line:hash' (e.g., '42:ab') or 'start:end' range.",
-                is_error=True,
-            )
+        if not path:
+            return ToolResult(output="No path provided.", is_error=True)
+        if not old_text:
+            return ToolResult(output="No oldText provided.", is_error=True)
         if not new_text:
-            return ToolResult(output="No new_text provided.", is_error=True)
+            return ToolResult(output="No newText provided.", is_error=True)
 
         try:
-            path = Path(file_path)
-            content = path.read_text()
+            file_path = Path(path)
+            raw_content = file_path.read_text()
         except FileNotFoundError:
-            return ToolResult(output=f"File not found: {file_path}", is_error=True)
+            return ToolResult(output=f"File not found: {path}", is_error=True)
         except OSError as e:
             return ToolResult(output=f"Error reading file: {e}", is_error=True)
 
-        lines = content.splitlines(keepends=True)
+        # Strip BOM before matching
+        bom, content = strip_bom(raw_content)
 
-        # Track the hash -> (line_num, content) mapping
-        hash_map: dict[tuple[int, str], int] = {}  # (line_num, hash) -> index in lines
-        for i, line in enumerate(lines):
-            content_stripped = line.rstrip("\n\r")
-            if content_stripped:  # Only hash non-empty lines
-                h = _hash_line(content_stripped)
-                hash_map[(i + 1, h)] = i  # 1-based line number
+        # Normalize line endings
+        original_ending = detect_line_ending(content)
+        normalized_content = normalize_to_lf(content)
+        normalized_old_text = normalize_to_lf(old_text)
+        normalized_new_text = normalize_to_lf(new_text)
 
-        # Hash-based editing
-        if hash_ref:
-            # Parse hash reference: could be "line:hash" or "start:end" range
-            if "-" in hash_ref and ":" in hash_ref:
-                # Range format: "start_hash-end_hash" or "start_line:end_line"
-                parts = hash_ref.split("-")
-                if len(parts) != 2:
-                    return ToolResult(
-                        output="Invalid hash range format. Use 'line:hash' or 'start:end'.",
-                        is_error=True,
-                    )
+        # Find the old text using fuzzy matching
+        found, match_index, match_length, content_for_replacement = fuzzy_find_text(
+            normalized_content, normalized_old_text
+        )
 
-                # Check if it's line:hash-line:hash format
-                if ":" in parts[0] and ":" in parts[1]:
-                    # Format: "line1:hash1-line2:hash2"
-                    start_match = re.match(r"^(\d+):([0-9a-f]+)$", parts[0])
-                    end_match = re.match(r"^(\d+):([0-9a-f]+)$", parts[1])
-                    if not start_match or not end_match:
-                        return ToolResult(
-                            output="Invalid hash range format.", is_error=True
-                        )
+        if not found:
+            return ToolResult(
+                output=f"Could not find the exact text in {path}. The old text must match exactly including all whitespace and newlines.",
+                is_error=True,
+            )
 
-                    start_line = int(start_match.group(1))
-                    start_hash = start_match.group(2)
-                    end_line = int(end_match.group(1))
-                    end_hash = end_match.group(2)
+        # Count occurrences using fuzzy-normalized content
+        fuzzy_content = normalize_for_fuzzy_match(normalized_content)
+        fuzzy_old_text = normalize_for_fuzzy_match(normalized_old_text)
+        occurrences = fuzzy_content.count(fuzzy_old_text)
 
-                    # Find the matching range
-                    start_idx = None
-                    end_idx = None
-                    for i, line in enumerate(lines):
-                        content_stripped = line.rstrip("\n\r")
-                        if content_stripped:
-                            h = _hash_line(content_stripped)
-                            line_num = i + 1
-                            if (
-                                start_idx is None
-                                and line_num == start_line
-                                and h == start_hash
-                            ):
-                                start_idx = i
-                            if (
-                                start_idx is not None
-                                and line_num == end_line
-                                and h == end_hash
-                            ):
-                                end_idx = i
-                                break
+        if occurrences > 1:
+            return ToolResult(
+                output=f"Found {occurrences} occurrences of the text in {path}. The text must be unique. Please provide more context to make it unique.",
+                is_error=True,
+            )
 
-                    if start_idx is None:
-                        return ToolResult(
-                            output=f"Start hash {parts[0]} not found in file.",
-                            is_error=True,
-                        )
-                    if end_idx is None:
-                        return ToolResult(
-                            output=f"End hash {parts[1]} not found in file.",
-                            is_error=True,
-                        )
-                    if end_idx < start_idx:
-                        return ToolResult(
-                            output="End hash appears before start hash.", is_error=True
-                        )
+        # Perform replacement
+        new_content = (
+            content_for_replacement[:match_index]
+            + normalized_new_text
+            + content_for_replacement[match_index + match_length:]
+        )
 
-                    # Replace the range
-                    # Preserve the original newlines
-                    new_lines = (
-                        lines[:start_idx]
-                        + [
-                            (
-                                new_text + "\n"
-                                if not new_text.endswith("\n")
-                                and start_idx < len(lines)
-                                and lines[start_idx].endswith("\n")
-                                else new_text
-                            )
-                        ]
-                        + lines[end_idx + 1 :]
-                    )
-                    new_content = "".join(new_lines)
-                else:
-                    return ToolResult(
-                        output="Invalid range format. Use 'line:hash-line:hash'.",
-                        is_error=True,
-                    )
-            elif ":" in hash_ref:
-                # Single line format: "line:hash"
-                match = re.match(r"^(\d+):([0-9a-f]+)$", hash_ref)
-                if not match:
-                    return ToolResult(
-                        output="Invalid hash format. Use 'line:hash'.", is_error=True
-                    )
+        # Verify the replacement actually changed something
+        if content_for_replacement == new_content:
+            return ToolResult(
+                output=f"No changes made to {path}. The replacement produced identical content. This might indicate an issue with special characters or the text not existing as expected.",
+                is_error=True,
+            )
 
-                line_num = int(match.group(1))
-                target_hash = match.group(2)
-
-                # Find the line with matching hash
-                idx = None
-                for i, line in enumerate(lines):
-                    content_stripped = line.rstrip("\n\r")
-                    if content_stripped:
-                        h = _hash_line(content_stripped)
-                        if i + 1 == line_num and h == target_hash:
-                            idx = i
-                            break
-
-                if idx is None:
-                    return ToolResult(
-                        output=f"Hash {hash_ref} not found in file. File may have changed since read.",
-                        is_error=True,
-                    )
-
-                # Replace the line
-                new_lines = (
-                    lines[:idx]
-                    + [new_text + ("\n" if lines[idx].endswith("\n") else "")]
-                    + lines[idx + 1 :]
-                )
-                new_content = "".join(new_lines)
-            else:
-                return ToolResult(
-                    output="Invalid hash format. Use 'line:hash' or 'start:end'.",
-                    is_error=True,
-                )
+        # Restore original line endings
+        final_content = restore_line_endings(new_content, original_ending)
+        final_content = bom + final_content
 
         try:
-            path.write_text(new_content)
+            file_path.write_text(final_content)
         except OSError as e:
             return ToolResult(output=f"Error writing file: {e}", is_error=True)
-        return ToolResult(output="Edit applied successfully.")
+
+        # Generate diff
+        diff_string, first_changed_line = generate_diff_string(
+            content_for_replacement, new_content
+        )
+
+        return ToolResult(
+            output=f"Successfully replaced text in {path}.",
+            diff=diff_string,
+            first_changed_line=first_changed_line,
+        )
 
 
 class SearchWebTool(Tool):
@@ -477,7 +585,6 @@ class SearchWebTool(Tool):
         if not query:
             return ToolResult(output="No query provided.", is_error=True)
 
-        # Note: no_redirect=1 suppresses abstract text and related topics, so we don't use it
         url = f"https://api.duckduckgo.com/?q={query}&format=json"
         try:
             async with httpx.AsyncClient() as client:
@@ -485,23 +592,20 @@ class SearchWebTool(Tool):
                 response.raise_for_status()
                 data = response.json()
 
-                results = []
-                # Check both Abstract and AbstractText (API returns either depending on query)
+                results: list[str] = []
                 abstract = data.get("Abstract") or data.get("AbstractText")
                 if abstract:
                     results.append(f"**Summary**: {abstract}")
                 if data.get("Answer"):
-                    results.append(f"**Answer**: {data["Answer"]}")
+                    results.append(f"**Answer**: {data['Answer']}")
                 if data.get("RelatedTopics"):
-                    for topic in data["RelatedTopics"][:3]:  # Limit to 3 topics
-                        # API returns "Result" key, not "Text"
+                    for topic in data["RelatedTopics"][:3]:
                         if "Result" in topic:
-                            # Strip HTML tags from result
                             text = topic["Result"]
                             text = re.sub(r"<[^>]+>", "", text)
                             results.append(f"- {text}")
                         elif "Topics" in topic:
-                            for subtopic in topic["Topics"][:2]:  # Limit to 2 subtopics
+                            for subtopic in topic["Topics"][:2]:
                                 if "Result" in subtopic:
                                     text = subtopic["Result"]
                                     text = re.sub(r"<[^>]+>", "", text)

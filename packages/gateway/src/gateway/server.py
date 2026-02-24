@@ -8,11 +8,10 @@ import ssl
 from pathlib import Path
 from typing import Any
 
+from agent import AgentClient
 from websockets.asyncio.server import ServerConnection, serve
 from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
-
-from agent import AgentClient
 
 from .session import Session
 
@@ -25,7 +24,9 @@ DEFAULT_PORT = 8765
 def _make_http_handler(web_dir: Path):
     """Create an HTTP handler that serves static files from web_dir."""
 
-    def process_request(connection: ServerConnection, request: Request) -> Response | None:
+    def process_request(
+        connection: ServerConnection, request: Request
+    ) -> Response | None:
         # If this is a WebSocket upgrade, let it through
         if "websocket" in request.headers.get("Upgrade", "").lower():
             return None
@@ -48,13 +49,17 @@ def _make_http_handler(web_dir: Path):
         if not file_path.is_file():
             return Response(404, "Not Found", Headers(), b"Not Found")
 
-        content_type = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        content_type = (
+            mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+        )
         body = file_path.read_bytes()
-        headers = Headers({
-            "Content-Type": content_type,
-            "Content-Length": str(len(body)),
-            "Cache-Control": "no-cache",
-        })
+        headers = Headers(
+            {
+                "Content-Type": content_type,
+                "Content-Length": str(len(body)),
+                "Cache-Control": "no-cache",
+            }
+        )
         return Response(200, "OK", headers, body)
 
     return process_request
@@ -89,9 +94,7 @@ async def run(
         tasks: set[asyncio.Task] = set()
         try:
             async for message in ws:
-                task = asyncio.create_task(
-                    session.handle_client_message(ws, message)
-                )
+                task = asyncio.create_task(session.handle_client_message(ws, message))
                 tasks.add(task)
                 task.add_done_callback(tasks.discard)
         finally:

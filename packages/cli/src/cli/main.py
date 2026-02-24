@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> None:
             use_tls = not args.no_tls
             opts = _gateway_opts(args, api_key)
             opts["port"] = random_port  # Override port with random port
-            opts["ephemeral"] = True
+            opts["daemon_mode"] = False
 
             pid = None
             try:

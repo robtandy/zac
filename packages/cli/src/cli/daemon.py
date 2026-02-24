@@ -68,14 +68,15 @@ def start(
     log_level: str = "info",
     api_key: str | None = None,
     paths: DefaultPaths | None = None,
+    daemon_mode: bool = True,
 ) -> int:
     """Start the gateway as a background daemon. Returns the PID."""
     paths = paths or DefaultPaths()
 
-    existing = status(paths)
-    if existing is not None:
-        print(f"Gateway already running (pid {existing})")
-        return existing
+    if daemon_mode:
+        if existing := status(paths):
+            print(f"Gateway already running (pid {existing})")
+            return existing
 
     # Build gateway command
     cmd = [sys.executable, "-m", "gateway", "--host", host, "--port", str(port)]
@@ -90,9 +91,7 @@ def start(
         if Path(cert).is_file() and Path(key).is_file():
             cmd.extend(["--tls-cert", cert, "--tls-key", key])
 
-    # Set up logging - stdout by default, or log file if specified
-    stdout = sys.stdout
-    stderr = sys.stderr
+    # Set up logging - null by default, or log file if specified
     if log_file:
         log = log_file
         cmd.extend(["--log-file", log])
@@ -101,6 +100,9 @@ def start(
         log_fh = open(log_path, "a")
         stdout = log_fh
         stderr = log_fh
+    else:
+        stdout = open("/dev/null", "w")
+        stderr = stdout
 
     if model:
         cmd.extend(["--model", model])
@@ -121,13 +123,17 @@ def start(
         env=env,
     )
 
-    # Write PID file
-    paths.pid_dir.mkdir(parents=True, exist_ok=True)
-    paths.pid_file.write_text(str(proc.pid))
+    if daemon_mode:
+        # Write PID file
+        paths.pid_dir.mkdir(parents=True, exist_ok=True)
+        paths.pid_file.write_text(str(proc.pid))
 
     # Wait for gateway to accept connections
     if not _wait_for_tcp(host, port):
-        print(f"Warning: gateway (pid {proc.pid}) did not become ready within 10s", file=sys.stderr)
+        print(
+            f"Warning: gateway (pid {proc.pid}) did not become ready within 10s",
+            file=sys.stderr,
+        )
         if log_file:
             print(f"Check log file: {log}", file=sys.stderr)
     else:

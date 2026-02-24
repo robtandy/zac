@@ -4,7 +4,7 @@ from .events import AgentEvent, EventType
 from .exceptions import AgentError, AgentNotRunning, ProcessNotRunning
 from .tools import (
     BashTool,
-    EditTool,
+    EditTool,  # from .tools_claude_style import (
     ReadTool,
     SearchWebTool,
     Tool,
