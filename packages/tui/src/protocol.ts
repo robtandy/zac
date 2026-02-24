@@ -4,7 +4,8 @@ export type ClientMessage =
   | { type: "steer"; message: string }
   | { type: "abort" }
   | { type: "context_request" }
-  | { type: "model_list_request" };
+  | { type: "model_list_request" }
+  | { type: "model_info_request"; model_id: string };
 
 // Gateway -> Client events
 export type ServerEvent =
@@ -27,4 +28,5 @@ export type ServerEvent =
   | { type: "canvas_dismiss" }
   | { type: "model_list"; models: { id: string; name: string; description: string }[]; current: string; reasoning_effort: string }
   | { type: "model_set"; model: string }
+  | { type: "model_info"; model_id: string; name: string; description: string; pricing: { prompt: string; completion: string } | null; context_length: number }
   | { type: "reasoning_effort_set"; effort: string; error?: string };

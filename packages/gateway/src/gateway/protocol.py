@@ -15,6 +15,7 @@ class ProtocolError(Exception):
 class ClientMessage(BaseModel):
     type: str
     message: str = ""
+    model_id: str = ""
 
     @classmethod
     def from_json(cls, data: str) -> ClientMessage:
@@ -27,14 +28,18 @@ class ClientMessage(BaseModel):
             raise ProtocolError("Message must be a JSON object")
 
         msg_type = parsed.get("type")
-        if msg_type not in ("prompt", "steer", "abort", "context_request", "model_list_request"):
+        if msg_type not in ("prompt", "steer", "abort", "context_request", "model_list_request", "model_info_request"):
             raise ProtocolError(f"Unknown message type: {msg_type}")
 
         message = parsed.get("message", "")
         if msg_type in ("prompt", "steer") and not message:
             raise ProtocolError(f"'{msg_type}' requires a 'message' field")
 
-        return cls(type=msg_type, message=message)
+        model_id = parsed.get("model_id", "")
+        if msg_type == "model_info_request" and not model_id:
+            raise ProtocolError("'model_info_request' requires a 'model_id' field")
+
+        return cls(type=msg_type, message=message, model_id=model_id)
 
 
 def serialize_event(event: AgentEvent) -> str:

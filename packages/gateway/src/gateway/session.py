@@ -110,6 +110,8 @@ class Session:
                     "current": self.agent.model,
                     "reasoning_effort": self.agent.reasoning_effort,
                 }))
+            case "model_info_request":
+                await self._handle_model_info(msg.model_id)
 
     async def _handle_reload(self) -> None:
         """Hot-reload agent modules and rebuild web package."""
@@ -252,6 +254,61 @@ class Session:
         except Exception as e:
             logger.warning("Failed to fetch model list: %s", e)
             return []
+
+    async def _handle_model_info(self, model_id: str) -> None:
+        """Fetch and display info about a specific model from OpenRouter (from cache)."""
+        # First, ensure we have the model list
+        models = await self._get_model_list()
+        
+        # Search for the model in the full cache (not just the stripped-down list)
+        # We need to refetch with full data to get pricing
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    "https://openrouter.ai/api/v1/models",
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                
+                # Find the model
+                model_data = None
+                for m in data.get("data", []):
+                    if m["id"] == model_id:
+                        model_data = m
+                        break
+                
+                if not model_data:
+                    await self.broadcast(json.dumps({
+                        "type": "error",
+                        "message": f"Model not found: {model_id}",
+                    }))
+                    return
+                
+                pricing = model_data.get("pricing")
+                pricing_info = None
+                if pricing:
+                    pricing_info = {
+                        "prompt": pricing.get("prompt", "0"),
+                        "completion": pricing.get("completion", "0"),
+                    }
+                
+                await self.broadcast(json.dumps({
+                    "type": "model_info",
+                    "model_id": model_data.get("id", model_id),
+                    "name": model_data.get("name", model_id),
+                    "description": model_data.get("description", ""),
+                    "pricing": pricing_info,
+                    "context_length": model_data.get("context_length", 0),
+                }))
+                logger.info("Fetched model info for %s", model_id)
+        except Exception as e:
+            logger.warning("Failed to fetch model info: %s", e)
+            await self.broadcast(json.dumps({
+                "type": "error",
+                "message": f"Failed to fetch model info: {e}",
+            }))
 
     async def _handle_prompt(self, message: str) -> None:
         # Broadcast user message to all clients so they stay in sync

@@ -68,6 +68,20 @@ export class ChatUI {
         },
       },
       { name: "search", description: "Search the web using DuckDuckGo" },
+      { name: "model-info", description: "Show info about a model (price, context length)",
+        getArgumentCompletions: (prefix: string) => {
+          if (!this.modelList.length) return null;
+          const lower = prefix.toLowerCase();
+          return this.modelList
+            .filter(m => m.id.toLowerCase().includes(lower) || m.name.toLowerCase().includes(lower))
+            .slice(0, 20)
+            .map(m => ({
+              value: m.id,
+              label: m.id,
+              description: m.description ? m.description.slice(0, 80) : m.name,
+            }));
+        },
+      },
     ];
 
     // Create autocomplete provider for slash commands
@@ -119,6 +133,16 @@ export class ChatUI {
           return;
         }
         this.connection.send({ type: "prompt", message: `/search ${query}` });
+        return;
+      }
+
+      if (trimmed === "/model-info" || trimmed.startsWith("/model-info ")) {
+        const modelId = trimmed.startsWith("/model-info ") ? trimmed.slice(12).trim() : this.currentModel;
+        if (!modelId) {
+          this.insertBeforeEditor(new Text("Error: No model specified and no current model set.", 1, 0, errorColor));
+          return;
+        }
+        this.connection.send({ type: "model_info_request", model_id: modelId });
         return;
       }
 
@@ -332,6 +356,29 @@ export class ChatUI {
         this.insertBeforeEditor(new Text(`[Model: ${event.model}]`, 1, 0, statusColor));
         this.setStatus("Ready");
         break;
+
+      case "model_info": {
+        const lines = [`Model: ${event.name} (${event.model_id})`, ""];
+        if (event.description) {
+          lines.push(event.description.slice(0, 500) + (event.description.length > 500 ? "..." : ""));
+          lines.push("");
+        }
+        if (event.pricing) {
+          const promptPrice = parseFloat(event.pricing.prompt);
+          const completionPrice = parseFloat(event.pricing.completion);
+          lines.push(`Pricing (per 1M tokens):`);
+          lines.push(`  Input:  $${(promptPrice * 1_000_000).toFixed(2)}`);
+          lines.push(`  Output: $${(completionPrice * 1_000_000).toFixed(2)}`);
+        } else {
+          lines.push("Pricing: Not available");
+        }
+        lines.push("");
+        lines.push(`Context length: ${event.context_length.toLocaleString()} tokens`);
+        const md = new Markdown(lines.join("\n"), 1, 0, markdownTheme);
+        this.insertBeforeEditor(md);
+        this.setStatus("Ready");
+        break;
+      }
 
       case "reasoning_effort_set":
         if (event.error) {
