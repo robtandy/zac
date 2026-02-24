@@ -105,10 +105,25 @@ The `action-system` package is a framework for managing **actions**, **permissio
 
 ---
 
+## What is Zac?
+
+### Overview
+**Zac** is the primary interface for interacting with this project. It is a **command-line tool** that:
+- Manages the **gateway** (a WebSocket server for agent sessions).
+- Launches the **TUI** (Terminal User Interface) for real-time interaction with AI agents.
+- Provides an **ephemeral gateway** for safe testing and development.
+
+Zac is designed to be simple, self-contained, and easy to use. It handles dependency management (e.g., auto-installing Node.js packages for the TUI) and ensures a smooth user experience.
+
+---
+
 ## CLI Package (`packages/cli`)
 
 ### Overview
-The CLI package provides the `zac` command-line interface. It manages the gateway daemon and launches the TUI.
+The CLI package provides the `zac` command-line interface. It:
+- Manages the **gateway daemon** (start, stop, restart, status).
+- Launches the **TUI** for real-time interaction with AI agents.
+- Automatically handles dependencies (e.g., `npm install` for the TUI).
 
 ### Key Files
 - **`src/cli/main.py`**: Entry point, argument parsing, command dispatch
@@ -177,3 +192,94 @@ The web UI served by the gateway. Pre-built files in `dist/` are committed to th
 - **Simplicity First**: Write the minimum code required to solve the problem. Avoid speculative features or abstractions.
 - **Event-Driven**: Use events to integrate systems (e.g., logging, notifications, UI updates).
 - **Persistence**: Use SQLite for persisting state (e.g., actions, permissions).
+
+---
+
+## Development Setup
+
+### Two-Directory Model
+- **`/root/zac-dev`**: Development directory where changes are made and tested.
+- **`/root/zac-run`**: Stable production directory - the version you run for daily use.
+
+### Testing the TUI in tmux
+To test the TUI in an isolated environment, use the following workflow:
+
+1. **Start a tmux session** for testing:
+   ```bash
+   tmux new -s tui-test
+   ```
+
+2. **Run the TUI with an ephemeral gateway**:
+   ```bash
+   cd /root/zac-dev
+   .venv/bin/zac
+   ```
+   - This automatically starts an ephemeral gateway for the TUI session.
+   - The TUI will launch and connect to the gateway.
+
+3. **Interact with the TUI**:
+   - Type messages or commands (e.g., `hello world`) to test functionality.
+   - Observe the output and behavior.
+
+4. **Detach from the tmux session** (optional):
+   - Press `Ctrl+b` followed by `d` to detach without stopping the TUI.
+
+5. **Reattach to the tmux session** (optional):
+   ```bash
+   tmux attach -t tui-test
+   ```
+
+6. **Kill the tmux session** when done:
+   ```bash
+   tmux kill-session -t tui-test
+   ```
+   - This stops the TUI and the ephemeral gateway.
+
+### Testing Workflow (for AI agent)
+To test changes safely, use tmux to run an **ephemeral gateway** and TUI. This avoids killing the production gateway.
+
+#### ⚠️ Warning
+Do **not** use `pkill -f "python.*gateway"` to kill the gateway during testing. This can kill the **production gateway** if it is running. Instead, use the ephemeral gateway workflow below.
+
+#### Ephemeral Gateway Workflow
+1. **Start a tmux session**:
+   ```bash
+   tmux new -s zac-dev
+   ```
+
+2. **Run the TUI using `.venv/bin/zac`**:
+   This command automatically starts an **ephemeral gateway** for the TUI session:
+   ```bash
+   cd /root/zac-dev
+   .venv/bin/zac
+   ```
+   - The gateway will run on a default port (e.g., `8765`).
+   - The TUI will connect to this gateway automatically.
+   - The gateway will shut down when the TUI session ends.
+
+   If you need to customize the gateway (e.g., port or log level), you can run it manually:
+   ```bash
+   source /root/zac-dev/.venv/bin/activate
+   cd /root/zac-dev
+   python -m gateway --no-tls --port 8765 --log-level debug
+   ```
+   Then, in another tmux pane, run the TUI:
+   ```bash
+   cd /root/zac-dev/packages/tui
+   ZAC_GATEWAY_URL=ws://localhost:8765 npx tsx src/index.ts
+   ```
+
+3. **Test your changes**:
+   Interact with the TUI to verify your changes work as expected.
+
+### Key Commands
+- **Start TUI with ephemeral gateway**: `.venv/bin/zac`
+- **Gateway logs**: Check the terminal where the gateway is running.
+- **Kill ephemeral gateway**: Close the TUI or use `Ctrl+C` in the gateway terminal.
+- **Restart**: Stop and start the gateway or TUI again.
+
+### Running Tests
+```bash
+cd /root/zac-dev/packages/gateway
+pytest tests/ -v
+```
