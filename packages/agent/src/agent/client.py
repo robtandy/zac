@@ -54,6 +54,7 @@ class AgentClient:
         model: str | None = None,
         system_prompt: str | None = None,
         tools: ToolRegistry | None = None,
+        reasoning_effort: str = "xhigh",
     ) -> None:
         self._model = model or _DEFAULT_MODEL
         self._system_prompt = system_prompt or _load_system_prompt()
@@ -63,6 +64,7 @@ class AgentClient:
         self._abort_event = asyncio.Event()
         self._steer_queue: asyncio.Queue[str] = asyncio.Queue()
         self._running = False
+        self._reasoning_effort = reasoning_effort
 
     @property
     def running(self) -> bool:
@@ -482,6 +484,14 @@ class AgentClient:
     def model(self) -> str:
         return self._model
 
+    @property
+    def reasoning_effort(self) -> str:
+        return self._reasoning_effort
+
+    def set_reasoning_effort(self, effort: str) -> None:
+        self._reasoning_effort = effort
+        logger.info("Reasoning effort switched to %s", effort)
+
     def set_model(self, model_id: str) -> None:
         self._model = model_id
         logger.info("Model switched to %s", model_id)
@@ -545,7 +555,7 @@ class AgentClient:
                     ],
                     tools=self._tools.schemas() or None,
                     stream=True,
-                    reasoning_effort="xhigh",
+                    reasoning_effort=self._reasoning_effort,
                 )
             except APIStatusError as e:
                 last_error = e

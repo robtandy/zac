@@ -25,5 +25,6 @@ export type ServerEvent =
   | { type: "canvas_update"; html?: string; url?: string }
   | { type: "canvas_screenshot"; image_data: string }
   | { type: "canvas_dismiss" }
-  | { type: "model_list"; models: { id: string; name: string; description: string }[]; current: string }
-  | { type: "model_set"; model: string };
+  | { type: "model_list"; models: { id: string; name: string; description: string }[]; current: string; reasoning_effort: string }
+  | { type: "model_set"; model: string }
+  | { type: "reasoning_effort_set"; effort: string; error?: string };

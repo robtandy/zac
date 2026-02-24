@@ -24,6 +24,7 @@ export class ChatUI {
   private screenshotDir: string | null = null;
   private modelList: { id: string; name: string; description: string }[] = [];
   private currentModel: string = "";
+  private reasoningEffort: string = "xhigh";
 
   constructor(connection: GatewayConnection) {
     this.connection = connection;
@@ -56,6 +57,16 @@ export class ChatUI {
         },
       },
       { name: "reload", description: "Reload the agent and web packages" },
+      { name: "reasoning", description: "Show or set reasoning effort (low, medium, high, xhigh)",
+        getArgumentCompletions: () => {
+          return [
+            { value: "low", label: "low", description: "Minimal reasoning" },
+            { value: "medium", label: "medium", description: "Balanced reasoning" },
+            { value: "high", label: "high", description: "More reasoning" },
+            { value: "xhigh", label: "xhigh", description: "Maximum reasoning" },
+          ];
+        },
+      },
       { name: "search", description: "Search the web using DuckDuckGo" },
     ];
 
@@ -87,6 +98,11 @@ export class ChatUI {
       }
 
       if (trimmed === "/model" || trimmed.startsWith("/model ")) {
+        this.connection.send({ type: "steer", message: trimmed });
+        return;
+      }
+
+      if (trimmed === "/reasoning" || trimmed.startsWith("/reasoning ")) {
         this.connection.send({ type: "steer", message: trimmed });
         return;
       }
@@ -304,13 +320,26 @@ export class ChatUI {
         this.modelList = event.models;
         if (event.current) {
           this.currentModel = event.current;
-          this.setStatus("Ready");
         }
+        if (event.reasoning_effort) {
+          this.reasoningEffort = event.reasoning_effort;
+        }
+        this.setStatus("Ready");
         break;
 
       case "model_set":
         this.currentModel = event.model;
         this.insertBeforeEditor(new Text(`[Model: ${event.model}]`, 1, 0, statusColor));
+        this.setStatus("Ready");
+        break;
+
+      case "reasoning_effort_set":
+        if (event.error) {
+          this.insertBeforeEditor(new Text(`[Reasoning: ${event.error}]`, 1, 0, errorColor));
+        } else {
+          this.reasoningEffort = event.effort;
+          this.insertBeforeEditor(new Text(`[Reasoning Effort: ${event.effort}]`, 1, 0, statusColor));
+        }
         this.setStatus("Ready");
         break;
     }
@@ -499,7 +528,8 @@ export class ChatUI {
   private setStatus(text: string): void {
     const cwd = process.cwd();
     const dirName = cwd.split(/[\/]/).pop() || cwd;
-    const left = `${text} | ${dirName}`;
+    const middle = ` | Reasoning: ${this.reasoningEffort}`;
+    const left = `${text} | ${dirName}${middle}`;
     if (this.currentModel) {
       const cols = process.stdout.columns || 80;
       const right = this.currentModel;

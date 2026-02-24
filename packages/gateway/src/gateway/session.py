@@ -90,6 +90,8 @@ class Session:
                     await self._handle_reload()
                 elif stripped.startswith("/model"):
                     await self._handle_model_command(stripped)
+                elif stripped.startswith("/reasoning"):
+                    await self._handle_reasoning_command(stripped)
                 else:
                     logger.debug("Steer: %s", msg.message)
                     async for event in self.agent.steer(msg.message):
@@ -106,6 +108,7 @@ class Session:
                     "type": "model_list",
                     "models": models,
                     "current": self.agent.model,
+                    "reasoning_effort": self.agent.reasoning_effort,
                 }))
 
     async def _handle_reload(self) -> None:
@@ -196,6 +199,31 @@ class Session:
         await self.broadcast(json.dumps({
             "type": "model_set",
             "model": model_id,
+        }))
+
+    async def _handle_reasoning_command(self, command: str) -> None:
+        """Handle /reasoning [effort] — show or switch reasoning effort."""
+        VALID_EFFORTS = ["low", "medium", "high", "xhigh"]
+        parts = command.split(None, 1)
+        if len(parts) < 2:
+            # No argument: show current reasoning effort
+            await self.broadcast(json.dumps({
+                "type": "reasoning_effort_set",
+                "effort": self.agent.reasoning_effort,
+            }))
+            return
+        effort = parts[1].strip().lower()
+        if effort not in VALID_EFFORTS:
+            await self.broadcast(json.dumps({
+                "type": "reasoning_effort_set",
+                "effort": self.agent.reasoning_effort,
+                "error": f"Invalid effort. Valid values: {', '.join(VALID_EFFORTS)}",
+            }))
+            return
+        self.agent.set_reasoning_effort(effort)
+        await self.broadcast(json.dumps({
+            "type": "reasoning_effort_set",
+            "effort": effort,
         }))
 
     async def _get_model_list(self) -> list[dict[str, str]]:
