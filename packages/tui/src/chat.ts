@@ -365,72 +365,65 @@ export class ChatUI {
         lines.push(`**ID:** ${event.model_id}`);
         lines.push("");
         
-        // Description
+        // Description (if present)
         if (event.description) {
-          lines.push(`## Description`);
-          lines.push(event.description.slice(0, 1000) + (event.description.length > 1000 ? "..." : ""));
+          lines.push(`> ${event.description.slice(0, 1000)}${event.description.length > 1000 ? "..." : ""}`);
           lines.push("");
         }
         
-        // Basic Info Table
-        lines.push("## Details");
-        lines.push("| Field | Value |");
-        lines.push("|-------|-------|");
-        lines.push(`| Context Length | ${event.context_length.toLocaleString()} tokens |`);
-        lines.push(`| Modality | ${event.modality || "N/A"} |`);
-        lines.push(`| Enabled | ${event.enabled ? "Yes" : "No"} |`);
-        lines.push(`| Route | ${event.route || "N/A"} |`);
-        if (event.created) {
-          const createdDate = new Date(event.created * 1000).toLocaleDateString();
-          lines.push(`| Created | ${createdDate} |`);
+        // Main Properties Table
+        const props: [string, string][] = [
+          ["Context Length", `${event.context_length.toLocaleString()} tokens`],
+          ["Modality", event.modality || "N/A"],
+          ["Enabled", event.enabled ? "Yes" : "No"],
+          ["Route", event.route || "N/A"],
+          ["Created", event.created ? new Date(event.created * 1000).toLocaleDateString() : "N/A"],
+        ];
+        
+        // Add architecture fields if present
+        if (event.architecture) {
+          if (event.architecture.model) props.push(["Architecture", event.architecture.model]);
+          if (event.architecture.mode) props.push(["Mode", event.architecture.mode]);
+          if (event.architecture.tokenizer) props.push(["Tokenizer", event.architecture.tokenizer]);
+          if (event.architecture.instruct_type) props.push(["Instruct Type", event.architecture.instruct_type]);
+        }
+        
+        lines.push("## Properties");
+        lines.push("| Property | Value |");
+        lines.push("|----------|-------|");
+        for (const [key, value] of props) {
+          lines.push(`| ${key} | ${value} |`);
         }
         lines.push("");
         
         // Pricing Table
         lines.push("## Pricing (per 1M tokens)");
-        lines.push("| Type | Price |");
-        lines.push("|------|-------|");
+        lines.push("| Input | Output |");
+        lines.push("|-------|--------|");
         if (event.pricing) {
           const promptPrice = parseFloat(event.pricing.prompt);
           const completionPrice = parseFloat(event.pricing.completion);
-          lines.push(`| Input | $${(promptPrice * 1_000_000).toFixed(2)} |`);
-          lines.push(`| Output | $${(completionPrice * 1_000_000).toFixed(2)} |`);
+          lines.push(`| $${(promptPrice * 1_000_000).toFixed(2)} | $${(completionPrice * 1_000_000).toFixed(2)} |`);
         } else {
-          lines.push("| Input | N/A |");
-          lines.push("| Output | N/A |");
-        }
-        lines.push("");
-        
-        // Architecture Table
-        if (event.architecture) {
-          lines.push("## Architecture");
-          lines.push("| Field | Value |");
-          lines.push("|-------|-------|");
-          lines.push(`| Model | ${event.architecture.model || "N/A"} |`);
-          lines.push(`| Mode | ${event.architecture.mode || "N/A"} |`);
-          lines.push(`| Tokenizer | ${event.architecture.tokenizer || "N/A"} |`);
-          lines.push(`| Instruct Type | ${event.architecture.instruct_type || "N/A"} |`);
-          lines.push("");
+          lines.push("| N/A | N/A |");
         }
         
-        // Top Provider Table
-        if (event.top_provider) {
-          lines.push("## Top Provider");
-          lines.push("| Field | Value |");
-          lines.push("|-------|-------|");
-          lines.push(`| Provider | ${event.top_provider.provider || "N/A"} |`);
-          lines.push(`| Max Completion Tokens | ${event.top_provider.max_completion_tokens.toLocaleString()} |`);
-          lines.push(`| Supports Vision | ${event.top_provider.supports_vision ? "Yes" : "No"} |`);
-          lines.push("");
-        }
-        
-        // Recommended Table
+        // Recommended (if present)
         if (event.recommended) {
+          lines.push("");
           lines.push("## Recommended (per 1M tokens)");
-          lines.push("| Type | Tokens |");
-          lines.push("|------|--------|");
-          lines.push(`| Input | ${event.recommended.prompt.toLocaleString()} |`);
-          lines.push(`| Output | ${event.recommended.completion.toLocaleString()} |`);
+          lines.push("| Input | Output |");
+          lines.push("|-------|--------|");
+          lines.push(`| ${event.recommended.prompt.toLocaleString()} tokens | ${event.recommended.completion.toLocaleString()} tokens |`);
+        }
+        
+        // Top Provider (if present)
+        if (event.top_provider) {
+          lines.push("");
+          lines.push("## Top Provider");
+          lines.push("| Provider | Max Output | Vision |");
+          lines.push("|----------|------------|--------|");
+          lines.push(`| ${event.top_provider.provider || "N/A"} | ${event.top_provider.max_completion_tokens.toLocaleString()} | ${event.top_provider.supports_vision ? "Yes" : "No"} |`);
         }
         
         const md = new Markdown(lines.join("\n"), 1, 0, markdownTheme);
