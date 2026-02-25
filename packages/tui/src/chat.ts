@@ -706,7 +706,6 @@ export class ChatUI {
     if (connected) {
       this.setStatus("Ready");
       this.connection.send({ type: "model_list_request" });
-      this.connection.send({ type: "context_request" });
     } else {
       this.setStatus("Reconnecting...");
     }
