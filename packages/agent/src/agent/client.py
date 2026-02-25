@@ -37,9 +37,11 @@ def _load_config() -> dict[str, str]:
     """Load config from ~/.zac/agent_config.json."""
     try:
         if _CONFIG_PATH.is_file():
-            return json.loads(_CONFIG_PATH.read_text())
-    except (json.JSONDecodeError, OSError):
-        pass
+            config = json.loads(_CONFIG_PATH.read_text())
+            logger.debug("Loaded config from %s: %s", _CONFIG_PATH, config)
+            return config
+    except (json.JSONDecodeError, OSError) as e:
+        logger.debug("Failed to load config from %s: %s", _CONFIG_PATH, e)
     return {}
 
 

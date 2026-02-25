@@ -83,7 +83,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-tls", action="store_true", help="Disable TLS")
     parser.add_argument("--system-prompt-file", help="Path to system prompt file")
     parser.add_argument(
-        "--model", default=DEFAULT_MODEL, help=f"Model ID (default: {DEFAULT_MODEL})"
+        "--model", default=None, help="Model ID (default: from config or anthropic/claude-sonnet-4)"
     )
     parser.add_argument("--log-file", help="Gateway log file path")
     parser.add_argument(
