@@ -252,8 +252,11 @@ export class ChatUI {
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
         this.insertBeforeEditor(new Spacer(1));
+        // Update context info from the event if available
+        if ("context_info" in event && event.context_info) {
+          this.contextInfo = event.context_info;
+        }
         this.setStatus("Ready");
-        this.connection.send({ type: "context_request" });
         break;
 
       case "error":

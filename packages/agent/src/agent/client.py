@@ -139,7 +139,7 @@ class AgentClient:
                     break
 
             if self._abort_event.is_set():
-                yield AgentEvent(type=EventType.TURN_END)
+                yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
                 yield AgentEvent(type=EventType.AGENT_END)
                 return
 
@@ -179,7 +179,7 @@ class AgentClient:
                 async for chunk in stream:
                     if self._abort_event.is_set():
                         await stream.close()
-                        yield AgentEvent(type=EventType.TURN_END)
+                        yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
                         yield AgentEvent(type=EventType.AGENT_END)
                         return
 
@@ -246,7 +246,7 @@ class AgentClient:
             # Execute tools
             for tc in sorted_tool_calls:
                 if self._abort_event.is_set():
-                    yield AgentEvent(type=EventType.TURN_END)
+                    yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
                     yield AgentEvent(type=EventType.AGENT_END)
                     return
 
@@ -324,10 +324,10 @@ class AgentClient:
                 )
 
             # Continue the loop for next turn
-            yield AgentEvent(type=EventType.TURN_END)
+            yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
             yield AgentEvent(type=EventType.TURN_START)
 
-        yield AgentEvent(type=EventType.TURN_END)
+        yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
         yield AgentEvent(type=EventType.AGENT_END)
 
     async def steer(self, message: str) -> AsyncIterator[AgentEvent]:

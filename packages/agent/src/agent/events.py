@@ -39,6 +39,7 @@ class AgentEvent(BaseModel):
     url: str = ""
     image_data: str = ""
     model_info: dict[str, Any] = Field(default_factory=dict)
+    context_info: dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         match self.type:
@@ -69,7 +70,10 @@ class AgentEvent(BaseModel):
                     "is_error": self.is_error,
                 }
             case EventType.TURN_END:
-                return {"type": "turn_end"}
+                d: dict[str, Any] = {"type": "turn_end"}
+                if self.context_info:
+                    d["context_info"] = self.context_info
+                return d
             case EventType.AGENT_END:
                 return {"type": "agent_end"}
             case EventType.ERROR:
