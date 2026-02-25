@@ -12,6 +12,7 @@ const red = (s: string) => `\x1b[31m${s}\x1b[39m`;
 const magenta = (s: string) => `\x1b[35m${s}\x1b[39m`;
 const gray = (s: string) => `\x1b[90m${s}\x1b[39m`;
 const white = (s: string) => `\x1b[37m${s}\x1b[39m`;
+const black = (s: string) => `\x1b[30m${s}\x1b[39m`;
 const bgGray = (s: string) => `\x1b[100m${s}\x1b[49m`;
 
 const selectListTheme: SelectListTheme = {
@@ -63,3 +64,5 @@ export const contextFreeColor = gray;
 export const compactionColor = cyan;
 
 export const imageTheme: ImageTheme = { fallbackColor: gray };
+
+export { bgGray, white, black };
