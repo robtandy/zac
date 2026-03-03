@@ -75,7 +75,7 @@ async def run(
     log_file: str | None = None,
     model: str | None = None,
     system_prompt: str | None = None,
-    context_log_file: str | None = None,
+    conversation_log_file: str | None = None,
 ) -> None:
     """Start the WebSocket gateway server."""
     log_level = logging.DEBUG if debug else logging.INFO
@@ -87,7 +87,7 @@ async def run(
 
     logging.basicConfig(level=log_level, format=log_format, handlers=handlers)
 
-    agent = AgentClient(model=model, system_prompt=system_prompt, context_log_file=context_log_file)
+    agent = AgentClient(model=model, system_prompt=system_prompt, conversation_log_file=conversation_log_file)
     session = Session(agent)
 
     async def handler(ws: ServerConnection) -> None:

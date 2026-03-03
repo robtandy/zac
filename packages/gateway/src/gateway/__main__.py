@@ -55,7 +55,7 @@ def main() -> None:
     parser.add_argument("--log-file", help="Also write logs to this file")
     parser.add_argument("--model", help="OpenRouter model ID (e.g. anthropic/claude-sonnet-4)")
     parser.add_argument("--system-prompt", help="System prompt for the agent")
-    parser.add_argument("--context-log", metavar="FILE", help="Save most recent message to FILE")
+    parser.add_argument("--conversation-log", metavar="FILE", help="Log all requests/responses to/from OpenRouter to FILE")
     args = parser.parse_args()
 
     # Ensure web dependencies are installed before starting
@@ -75,7 +75,7 @@ def main() -> None:
         log_file=args.log_file,
         model=args.model,
         system_prompt=args.system_prompt,
-        context_log_file=args.context_log,
+        conversation_log_file=args.conversation_log,
     ))
 
 

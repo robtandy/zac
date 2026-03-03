@@ -79,7 +79,7 @@ class AgentClient:
         system_prompt: str | None = None,
         tools: ToolRegistry | None = None,
         reasoning_effort: str = "xhigh",
-        context_log_file: str | None = None,
+        conversation_log_file: str | None = None,
     ) -> None:
         # Load config to get saved model and reasoning_effort
         config = _load_config()
@@ -94,7 +94,7 @@ class AgentClient:
         self._steer_queue: asyncio.Queue[str] = asyncio.Queue()
         self._running = False
         self._reasoning_effort = config.get("reasoning_effort", reasoning_effort)
-        self._context_log_file = context_log_file
+        self._conversation_log_file = conversation_log_file
 
     @property
     def running(self) -> bool:
@@ -589,17 +589,38 @@ class AgentClient:
             "reasoning_effort": self._reasoning_effort,
         }
 
-        # Log the request to file if context_log_file is set
-        if self._context_log_file:
+        # Log the request to file if conversation_log_file is set
+        if self._conversation_log_file:
             try:
-                Path(self._context_log_file).write_text(json.dumps(request_payload, indent=2))
-                logger.info("Logged request to %s", self._context_log_file)
+                with open(self._conversation_log_file, "a") as f:
+                    f.write(json.dumps({"type": "request", "payload": request_payload}) + "\n")
+                logger.info("Logged request to %s", self._conversation_log_file)
             except OSError as e:
-                logger.warning("Failed to write context log: %s", e)
+                logger.warning("Failed to write conversation log: %s", e)
 
         for attempt in range(_MAX_RETRIES):
             try:
-                return await self._client.chat.completions.create(**request_payload)
+                # Create the stream
+                stream = await self._client.chat.completions.create(**request_payload)
+                
+                # If conversation_log_file is set, accumulate the full response
+                if self._conversation_log_file:
+                    response_chunks = []
+                    async for chunk in stream:
+                        # Extract the chunk data
+                        chunk_dict = chunk.model_dump()
+                        response_chunks.append(chunk_dict)
+                    # Log the complete response after streaming is done
+                    try:
+                        with open(self._conversation_log_file, "a") as f:
+                            f.write(json.dumps({"type": "response", "payload": response_chunks}) + "\n")
+                    except OSError as e:
+                        logger.warning("Failed to write conversation log: %s", e)
+                    # Return a dummy stream for the rest of the code to iterate
+                    return self._dummy_stream(response_chunks)
+                else:
+                    return stream
+                    
             except APIStatusError as e:
                 last_error = e
                 if e.status_code not in _RETRYABLE_STATUS_CODES:
@@ -625,3 +646,8 @@ class AgentClient:
                 backoff = min(backoff * 2, _MAX_BACKOFF)
 
         raise AgentError(f"Max retries ({_MAX_RETRIES}) exceeded: {last_error}")
+
+    async def _dummy_stream(self, chunks: list) -> AsyncIterator:
+        """Yield pre-collected chunks as a dummy stream."""
+        for chunk in chunks:
+            yield chunk
