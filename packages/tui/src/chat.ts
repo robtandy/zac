@@ -671,16 +671,18 @@ export class ChatUI {
       secondRow = `${modelLabel}${modelText}`;
     }
     
-    // Third row: Context info (if available)
+    // Third row: Context info (always show label, value when available)
+    const ctxLabel = labelStyle(" ctx ");
     let thirdRow = "";
     if (this.contextInfo) {
       const ctx = this.contextInfo;
       const used = ctx.system + ctx.tools + ctx.user + ctx.assistant + ctx.tool_results;
       const pct = ctx.context_window > 0 ? Math.round((used / ctx.context_window) * 100) : 0;
       
-      const ctxLabel = labelStyle(" ctx ");
       const ctxValue = dimStyle(`S:${ctx.system.toLocaleString()} T:${ctx.tools.toLocaleString()} U:${ctx.user.toLocaleString()} A:${ctx.assistant.toLocaleString()} TR:${ctx.tool_results.toLocaleString()} | ${pct}% (${used.toLocaleString()}/${ctx.context_window.toLocaleString()})`);
       thirdRow = `${ctxLabel}${ctxValue}`;
+    } else {
+      thirdRow = `${ctxLabel}`;
     }
     
     // Fourth row: Compaction count
