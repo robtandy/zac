@@ -649,5 +649,7 @@ class AgentClient:
 
     async def _dummy_stream(self, chunks: list) -> AsyncIterator:
         """Yield pre-collected chunks as a dummy stream."""
-        for chunk in chunks:
-            yield chunk
+        # Import here to avoid circular imports
+        from openai.types.chat import ChatCompletionChunk
+        for chunk_dict in chunks:
+            yield ChatCompletionChunk(**chunk_dict)
