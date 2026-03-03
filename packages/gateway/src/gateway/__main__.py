@@ -75,7 +75,7 @@ def main() -> None:
         log_file=args.log_file,
         model=args.model,
         system_prompt=args.system_prompt,
-        ii_file=args.context_log,
+        context_log_file=args.context_log,
     ))
 
 
