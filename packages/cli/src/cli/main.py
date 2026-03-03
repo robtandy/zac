@@ -92,6 +92,7 @@ def _add_common_options(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_LOG_LEVEL,
         help=f"Log level (default: {DEFAULT_LOG_LEVEL})",
     )
+    parser.add_argument("--context-log", metavar="FILE", help="Save most recent message to FILE")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -149,6 +150,7 @@ def _gateway_opts(args: argparse.Namespace, api_key: str | None = None) -> dict:
         model=args.model,
         log_file=args.log_file,
         log_level=args.log_level,
+        context_log=args.context_log,
     )
     if api_key:
         opts["api_key"] = api_key

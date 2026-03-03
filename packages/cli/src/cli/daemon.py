@@ -67,6 +67,7 @@ def start(
     log_file: str | None = None,
     log_level: str = "info",
     api_key: str | None = None,
+    context_log: str | None = None,
     paths: DefaultPaths | None = None,
     daemon_mode: bool = True,
 ) -> int:
@@ -112,6 +113,9 @@ def start(
     if model:
         cmd.extend(["--model", model])
 
+    if context_log:
+        cmd.extend(["--context-log", context_log])
+
     # Environment: pass system prompt file and API key
     env = os.environ.copy()
     prompt_file = system_prompt_file or str(paths.system_prompt)
@@ -147,11 +151,11 @@ def start(
     return proc.pid
 
 
-def restart(*, paths: DefaultPaths | None = None, **kwargs) -> int:
+def restart(*, paths: DefaultPaths | None = None, context_log: str | None = None, **kwargs) -> int:
     """Restart the gateway daemon. Returns the new PID."""
     paths = paths or DefaultPaths()
     stop(paths)
-    return start(paths=paths, **kwargs)
+    return start(paths=paths, context_log=context_log, **kwargs)
 
 
 def stop(paths: DefaultPaths | None = None) -> bool:
