@@ -22,8 +22,5 @@ export type ServerEvent =
   | { type: "compaction_end"; summary: string; tokens_before: number }
   | { type: "reload_start" }
   | { type: "reload_end"; success: boolean; message: string }
-  | { type: "canvas_update"; html?: string; url?: string }
-  | { type: "canvas_screenshot"; image_data: string }
-  | { type: "canvas_dismiss" }
   | { type: "model_list"; models: { id: string; name: string; description: string }[]; current: string }
   | { type: "model_set"; model: string };

@@ -1,8 +1,5 @@
 import { execSync } from "child_process";
-import { writeFileSync, mkdtempSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
-import { TUI, ProcessTerminal, Editor, Image, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
+import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
 import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black } from "./theme.js";
@@ -21,7 +18,6 @@ export class ChatUI {
   private statusBar: Text;
   private inputQueuedDuringCompaction: string[] = [];
   private isCompacting = false;
-  private screenshotDir: string | null = null;
   private modelList: { id: string; name: string; description: string }[] = [];
   private currentModel: string = "";
   private reasoningEffort: string = "xhigh";
@@ -318,37 +314,6 @@ export class ChatUI {
       case "context_info":
         this.contextInfo = event;
         this.renderContextBar(event);
-        break;
-
-      case "canvas_update": {
-        const label = event.url ? `Navigated to ${event.url}` : "HTML updated";
-        this.insertBeforeEditor(new Text(`[Canvas: ${label}]`, 0, 0, statusColor));
-        break;
-      }
-
-      case "canvas_screenshot": {
-        if (!process.env.TMUX) {
-          // Native Kitty/iTerm2 — inline image
-          this.insertBeforeEditor(new Text("[Canvas screenshot]", 0, 0, statusColor));
-          const img = new Image(event.image_data, "image/png", imageTheme, { maxWidthCells: 80 });
-          this.insertBeforeEditor(img);
-        } else {
-          // Inside tmux — save to file, display with kitten icat
-          const dir = this.screenshotDir ?? (this.screenshotDir = mkdtempSync(join(tmpdir(), "zac-canvas-")));
-          const file = join(dir, `screenshot-${Date.now()}.png`);
-          writeFileSync(file, Buffer.from(event.image_data, "base64"));
-          try {
-            execSync(`kitten icat --transfer-mode=file "${file}"`, { stdio: "inherit", timeout: 5000 });
-          } catch {
-            this.insertBeforeEditor(new Text(`[Canvas screenshot saved: ${file}]`, 0, 0, statusColor));
-            this.insertBeforeEditor(new Text("[Install kitty to display inline: https://sw.kovidgoyal.net/kitty/]", 0, 0, statusColor));
-          }
-        }
-        break;
-      }
-
-      case "canvas_dismiss":
-        this.insertBeforeEditor(new Text("[Canvas dismissed]", 0, 0, statusColor));
         break;
 
       case "model_list":
