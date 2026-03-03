@@ -79,6 +79,7 @@ class AgentClient:
         system_prompt: str | None = None,
         tools: ToolRegistry | None = None,
         reasoning_effort: str = "xhigh",
+        context_log_file: str | None = None,
     ) -> None:
         # Load config to get saved model and reasoning_effort
         config = _load_config()
@@ -93,6 +94,7 @@ class AgentClient:
         self._steer_queue: asyncio.Queue[str] = asyncio.Queue()
         self._running = False
         self._reasoning_effort = config.get("reasoning_effort", reasoning_effort)
+        self._context_log_file = context_log_file
 
     @property
     def running(self) -> bool:
@@ -575,18 +577,29 @@ class AgentClient:
         backoff = _INITIAL_BACKOFF
         last_error: Exception | None = None
 
+        # Build the request payload
+        request_payload = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": self._system_prompt},
+                *self._messages,
+            ],
+            "tools": self._tools.schemas() or None,
+            "stream": True,
+            "reasoning_effort": self._reasoning_effort,
+        }
+
+        # Log the request to file if context_log_file is set
+        if self._context_log_file:
+            try:
+                Path(self._context_log_file).write_text(json.dumps(request_payload, indent=2))
+                logger.info("Logged request to %s", self._context_log_file)
+            except OSError as e:
+                logger.warning("Failed to write context log: %s", e)
+
         for attempt in range(_MAX_RETRIES):
             try:
-                return await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=[
-                        {"role": "system", "content": self._system_prompt},
-                        *self._messages,
-                    ],
-                    tools=self._tools.schemas() or None,
-                    stream=True,
-                    reasoning_effort=self._reasoning_effort,
-                )
+                return await self._client.chat.completions.create(**request_payload)
             except APIStatusError as e:
                 last_error = e
                 if e.status_code not in _RETRYABLE_STATUS_CODES:

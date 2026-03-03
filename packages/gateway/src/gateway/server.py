@@ -87,8 +87,8 @@ async def run(
 
     logging.basicConfig(level=log_level, format=log_format, handlers=handlers)
 
-    agent = AgentClient(model=model, system_prompt=system_prompt)
-    session = Session(agent, context_log_file=context_log_file)
+    agent = AgentClient(model=model, system_prompt=system_prompt, context_log_file=context_log_file)
+    session = Session(agent)
 
     async def handler(ws: ServerConnection) -> None:
         session.add_client(ws)

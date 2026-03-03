@@ -50,12 +50,11 @@ class Session:
     agent events to all connected clients.
     """
 
-    def __init__(self, agent: AgentClient, context_log_file: str | None = None) -> None:
+    def __init__(self, agent: AgentClient) -> None:
         self.agent = agent
         self.clients: set[ServerConnection] = set()
         self._prompt_lock = asyncio.Lock()
         self._model_cache: list[dict[str, str]] | None = None
-        self._context_log_file = context_log_file
 
     def add_client(self, ws: ServerConnection) -> None:
         self.clients.add(ws)
@@ -76,18 +75,6 @@ class Session:
 
     async def handle_client_message(self, ws: ServerConnection, data: str) -> None:
         logger.debug("Client message: %s", data)
-
-        # Handle --context-log file saving (save input message as-is)
-        if self._context_log_file:
-            try:
-                msg_data = json.loads(data)
-                msg_type = msg_data.get("type")
-                if msg_type in ("prompt", "steer"):
-                    Path(self._context_log_file).write_text(data)
-                    logger.info("Saved input message to %s", self._context_log_file)
-            except json.JSONDecodeError:
-                pass
-
         try:
             msg = ClientMessage.from_json(data)
         except ProtocolError as e:
