@@ -6,7 +6,10 @@
 
 import asyncio
 import difflib
+import html as html_module
 import re
+import subprocess
+import urllib.parse
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -567,7 +570,7 @@ class SearchWebTool(Tool):
     def definition(self) -> ToolDefinition:
         return ToolDefinition(
             name="search_web",
-            description="Search the web using DuckDuckGo (no API key required).",
+            description="Search the web using Bing.",
             parameters={
                 "type": "object",
                 "properties": {
@@ -585,36 +588,50 @@ class SearchWebTool(Tool):
         if not query:
             return ToolResult(output="No query provided.", is_error=True)
 
-        url = f"https://api.duckduckgo.com/?q={query}&format=json"
+        url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&hl=en&gbv=1"
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
+            result = subprocess.run(
+                [
+                    "curl", "-s", "--compressed",
+                    "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
+                    "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    "-H", "Accept-Language: en-US,en;q=0.5",
+                    "-H", "Accept-Encoding: gzip, deflate, br",
+                    "-H", "Connection: keep-alive",
+                    "-H", "Upgrade-Insecure-Requests: 1",
+                    "-H", "Sec-Fetch-Dest: document",
+                    "-H", "Sec-Fetch-Mode: navigate",
+                    "-H", "Sec-Fetch-Site: none",
+                    "-H", "Sec-Fetch-User: ?1",
+                    "-H", "TE: trailers",
+                    url,
+                ],
+                capture_output=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return ToolResult(output=f"curl failed: {result.stderr.decode('utf-8')}", is_error=True)
 
-                results: list[str] = []
-                abstract = data.get("Abstract") or data.get("AbstractText")
-                if abstract:
-                    results.append(f"**Summary**: {abstract}")
-                if data.get("Answer"):
-                    results.append(f"**Answer**: {data['Answer']}")
-                if data.get("RelatedTopics"):
-                    for topic in data["RelatedTopics"][:3]:
-                        if "Result" in topic:
-                            text = topic["Result"]
-                            text = re.sub(r"<[^>]+>", "", text)
-                            results.append(f"- {text}")
-                        elif "Topics" in topic:
-                            for subtopic in topic["Topics"][:2]:
-                                if "Result" in subtopic:
-                                    text = subtopic["Result"]
-                                    text = re.sub(r"<[^>]+>", "", text)
-                                    results.append(f"- {text}")
+            html = result.stdout.decode("utf-8")
 
-                if not results:
-                    return ToolResult(output="No results found.")
+            # Extract search result titles and links from Bing
+            titles = re.findall(r'<h2[^>]*><a[^>]*>([^<]+)</a></h2>', html)
+            snippets = re.findall(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>([^<]+)</p>', html)
 
-                return ToolResult(output="\n".join(results))
+            results: list[str] = []
+            for i, title in enumerate(titles[:5]):
+                title = re.sub(r'<[^>]+>', '', title)
+                title = html_module.unescape(title)
+                snippet = ""
+                if i < len(snippets):
+                    s = re.sub(r'<[^>]+>', '', snippets[i])
+                    snippet = f" - {html_module.unescape(s)}"
+                results.append(f"- {title}{snippet}")
+
+            if not results:
+                return ToolResult(output=f"No results found. HTML length: {len(html)}")
+
+            return ToolResult(output="\n".join(results))
         except Exception as e:
             return ToolResult(output=f"Failed to search: {e}", is_error=True)
 
