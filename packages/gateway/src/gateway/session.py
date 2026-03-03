@@ -56,7 +56,6 @@ class Session:
         self._prompt_lock = asyncio.Lock()
         self._model_cache: list[dict[str, str]] | None = None
         self._context_log_file = context_log_file
-        self._last_text_content: str = ""
 
     def add_client(self, ws: ServerConnection) -> None:
         self.clients.add(ws)
@@ -70,21 +69,6 @@ class Session:
         logger.debug("Broadcast: %s", message)
         if not self.clients:
             return
-
-        # Handle --context-log file saving
-        if self._context_log_file:
-            try:
-                data = json.loads(message)
-                if data.get("type") == "text_delta":
-                    self._last_text_content += data.get("delta", "")
-                elif data.get("type") == "turn_end":
-                    # Save the accumulated text to the context log file
-                    Path(self._context_log_file).write_text(self._last_text_content)
-                    logger.info("Saved response to %s", self._context_log_file)
-                    self._last_text_content = ""  # Reset for next response
-            except json.JSONDecodeError:
-                pass
-
         await asyncio.gather(
             *(ws.send(message) for ws in self.clients),
             return_exceptions=True,
@@ -92,6 +76,18 @@ class Session:
 
     async def handle_client_message(self, ws: ServerConnection, data: str) -> None:
         logger.debug("Client message: %s", data)
+
+        # Handle --context-log file saving (save input message as-is)
+        if self._context_log_file:
+            try:
+                msg_data = json.loads(data)
+                msg_type = msg_data.get("type")
+                if msg_type in ("prompt", "steer"):
+                    Path(self._context_log_file).write_text(data)
+                    logger.info("Saved input message to %s", self._context_log_file)
+            except json.JSONDecodeError:
+                pass
+
         try:
             msg = ClientMessage.from_json(data)
         except ProtocolError as e:
