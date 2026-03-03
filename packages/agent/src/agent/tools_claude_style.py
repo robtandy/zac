@@ -435,66 +435,6 @@ Example usage:
         return ToolResult(output=f"Applied {len(edits)} edit(s) successfully.")
 
 
-class SearchWebTool(Tool):
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name="search_web",
-            description="Search the web using DuckDuckGo (no API key required).",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query.",
-                    }
-                },
-                "required": ["query"],
-            },
-        )
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        query = args.get("query", "")
-        if not query:
-            return ToolResult(output="No query provided.", is_error=True)
-
-        # Note: no_redirect=1 suppresses abstract text and related topics, so we don't use it
-        url = f"https://api.duckduckgo.com/?q={query}&format=json"
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = response.json()
-
-                results = []
-                # Check both Abstract and AbstractText (API returns either depending on query)
-                abstract = data.get("Abstract") or data.get("AbstractText")
-                if abstract:
-                    results.append(f"**Summary**: {abstract}")
-                if data.get("Answer"):
-                    results.append(f"**Answer**: {data['Answer']}")
-                if data.get("RelatedTopics"):
-                    for topic in data["RelatedTopics"][:3]:  # Limit to 3 topics
-                        # API returns "Result" key, not "Text"
-                        if "Result" in topic:
-                            # Strip HTML tags from result
-                            text = topic["Result"]
-                            text = re.sub(r"<[^>]+>", "", text)
-                            results.append(f"- {text}")
-                        elif "Topics" in topic:
-                            for subtopic in topic["Topics"][:2]:  # Limit to 2 subtopics
-                                if "Result" in subtopic:
-                                    text = subtopic["Result"]
-                                    text = re.sub(r"<[^>]+>", "", text)
-                                    results.append(f"- {text}")
-
-                if not results:
-                    return ToolResult(output="No results found.")
-
-                return ToolResult(output="\n".join(results))
-        except Exception as e:
-            return ToolResult(output=f"Failed to search: {e}", is_error=True)
-
-
 def default_tools() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(BashTool())
@@ -502,5 +442,4 @@ def default_tools() -> ToolRegistry:
     registry.register(WriteTool())
     registry.register(EditTool())
     registry.register(MultiEditTool())
-    registry.register(SearchWebTool())
     return registry

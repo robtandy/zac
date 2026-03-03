@@ -6,10 +6,7 @@
 
 import asyncio
 import difflib
-import html as html_module
 import re
-import subprocess
-import urllib.parse
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
@@ -566,81 +563,10 @@ The tool returns a diff of the changes made.
         )
 
 
-class SearchWebTool(Tool):
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name="search_web",
-            description="Search the web using Bing.",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query.",
-                    }
-                },
-                "required": ["query"],
-            },
-        )
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        query = args.get("query", "")
-        if not query:
-            return ToolResult(output="No query provided.", is_error=True)
-
-        url = f"https://www.google.com/search?q={urllib.parse.quote(query)}&hl=en&gbv=1"
-        try:
-            result = subprocess.run(
-                [
-                    "curl", "-s", "--compressed",
-                    "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/115.0",
-                    "-H", "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    "-H", "Accept-Language: en-US,en;q=0.5",
-                    "-H", "Accept-Encoding: gzip, deflate, br",
-                    "-H", "Connection: keep-alive",
-                    "-H", "Upgrade-Insecure-Requests: 1",
-                    "-H", "Sec-Fetch-Dest: document",
-                    "-H", "Sec-Fetch-Mode: navigate",
-                    "-H", "Sec-Fetch-Site: none",
-                    "-H", "Sec-Fetch-User: ?1",
-                    "-H", "TE: trailers",
-                    url,
-                ],
-                capture_output=True,
-                timeout=30,
-            )
-            if result.returncode != 0:
-                return ToolResult(output=f"curl failed: {result.stderr.decode('utf-8')}", is_error=True)
-
-            html = result.stdout.decode("utf-8")
-
-            # Extract search result titles and links from Bing
-            titles = re.findall(r'<h2[^>]*><a[^>]*>([^<]+)</a></h2>', html)
-            snippets = re.findall(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>([^<]+)</p>', html)
-
-            results: list[str] = []
-            for i, title in enumerate(titles[:5]):
-                title = re.sub(r'<[^>]+>', '', title)
-                title = html_module.unescape(title)
-                snippet = ""
-                if i < len(snippets):
-                    s = re.sub(r'<[^>]+>', '', snippets[i])
-                    snippet = f" - {html_module.unescape(s)}"
-                results.append(f"- {title}{snippet}")
-
-            if not results:
-                return ToolResult(output=f"No results found. HTML length: {len(html)}")
-
-            return ToolResult(output="\n".join(results))
-        except Exception as e:
-            return ToolResult(output=f"Failed to search: {e}", is_error=True)
-
-
 def default_tools() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(BashTool())
     registry.register(ReadTool())
     registry.register(WriteTool())
     registry.register(EditTool())
-    registry.register(SearchWebTool())
     return registry
