@@ -50,11 +50,13 @@ class Session:
     agent events to all connected clients.
     """
 
-    def __init__(self, agent: AgentClient) -> None:
+    def __init__(self, agent: AgentClient, ii_file: str | None = None) -> None:
         self.agent = agent
         self.clients: set[ServerConnection] = set()
         self._prompt_lock = asyncio.Lock()
         self._model_cache: list[dict[str, str]] | None = None
+        self._ii_file = ii_file
+        self._last_text_content: str = ""
 
     def add_client(self, ws: ServerConnection) -> None:
         self.clients.add(ws)
@@ -68,6 +70,21 @@ class Session:
         logger.debug("Broadcast: %s", message)
         if not self.clients:
             return
+
+        # Handle --ii file saving
+        if self._ii_file:
+            try:
+                data = json.loads(message)
+                if data.get("type") == "text_delta":
+                    self._last_text_content += data.get("delta", "")
+                elif data.get("type") == "turn_end":
+                    # Save the accumulated text to the ii file
+                    Path(self._ii_file).write_text(self._last_text_content)
+                    logger.info("Saved response to %s", self._ii_file)
+                    self._last_text_content = ""  # Reset for next response
+            except json.JSONDecodeError:
+                pass
+
         await asyncio.gather(
             *(ws.send(message) for ws in self.clients),
             return_exceptions=True,
