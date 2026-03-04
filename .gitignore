@@ -9,6 +9,5 @@ build/
 uv.lock
 node_modules/
 certs/
-.zac/
 uv-venv/
 gw.log
