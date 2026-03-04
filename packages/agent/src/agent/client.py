@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
-from pathlib import Path
 from typing import Any, AsyncIterator
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 
+from .config import get_model, get_reasoning_effort, save_model_preferences
 from .events import AgentEvent, EventType
 from .exceptions import AgentError, AgentNotRunning
 from .tools import ToolRegistry, default_tools
@@ -29,29 +28,6 @@ _MODEL_CONTEXT_SIZES: dict[str, int] = {
 }
 
 _COMPACTION_THRESHOLD = 0.8
-
-_CONFIG_PATH = Path.home() / ".zac" / "agent_config.json"
-
-
-def _load_config() -> dict[str, str]:
-    """Load config from ~/.zac/agent_config.json."""
-    try:
-        if _CONFIG_PATH.is_file():
-            config = json.loads(_CONFIG_PATH.read_text())
-            logger.debug("Loaded config from %s: %s", _CONFIG_PATH, config)
-            return config
-    except (json.JSONDecodeError, OSError) as e:
-        logger.debug("Failed to load config from %s: %s", _CONFIG_PATH, e)
-    return {}
-
-
-def _save_config(config: dict[str, str]) -> None:
-    """Save config to ~/.zac/agent_config.json."""
-    try:
-        _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _CONFIG_PATH.write_text(json.dumps(config, indent=2))
-    except OSError:
-        pass
 _KEEP_RECENT_TOKENS = 20000
 _CHARS_PER_TOKEN = 4
 
@@ -81,11 +57,8 @@ class AgentClient:
         reasoning_effort: str = "xhigh",
         conversation_log_file: str | None = None,
     ) -> None:
-        # Load config to get saved model and reasoning_effort
-        config = _load_config()
-        
         # Use provided values first, then fall back to saved config
-        self._model = model or config.get("model") or _DEFAULT_MODEL
+        self._model = model or get_model() or _DEFAULT_MODEL
         self._system_prompt = system_prompt or _load_system_prompt()
         self._tools = tools or default_tools()
         self._client: AsyncOpenAI | None = None
@@ -93,7 +66,7 @@ class AgentClient:
         self._abort_event = asyncio.Event()
         self._steer_queue: asyncio.Queue[str] = asyncio.Queue()
         self._running = False
-        self._reasoning_effort = config.get("reasoning_effort", reasoning_effort)
+        self._reasoning_effort = get_reasoning_effort() or reasoning_effort
         self._conversation_log_file = conversation_log_file
 
     @property
@@ -491,12 +464,12 @@ class AgentClient:
     def set_reasoning_effort(self, effort: str) -> None:
         self._reasoning_effort = effort
         logger.info("Reasoning effort switched to %s", effort)
-        _save_config({"model": self._model, "reasoning_effort": effort})
+        save_model_preferences(self._model, effort)
 
     def set_model(self, model_id: str) -> None:
         self._model = model_id
         logger.info("Model switched to %s", model_id)
-        _save_config({"model": model_id, "reasoning_effort": self._reasoning_effort})
+        save_model_preferences(model_id, self._reasoning_effort)
 
     async def abort(self) -> None:
         self._abort_event.set()

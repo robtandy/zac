@@ -9,6 +9,8 @@ from typing import Annotated
 
 import typer
 
+from agent.config import get_api_key as _get_api_key_from_config, save_user_config, load_user_config
+
 from . import daemon, tui
 from .paths import DefaultPaths
 
@@ -19,35 +21,35 @@ DEFAULT_LOG_LEVEL = "info"
 app = typer.Typer(help="Zac agent CLI", invoke_without_command=True)
 
 
-def _load_config(paths: DefaultPaths) -> dict | None:
-    """Load config from zac-config.toml if it exists."""
-    config_file = paths.config_file
-    if not config_file.is_file():
-        return None
-
-    try:
-        import tomllib
-    except ImportError:
-        import tomli as tomllib
-
-    try:
-        with open(config_file, "rb") as f:
-            return tomllib.load(f)
-    except Exception as e:
-        print(f"Warning: failed to load config from {config_file}: {e}", file=sys.stderr)
-        return None
-
-
 def _get_api_key(paths: DefaultPaths) -> str:
     """Get the OpenRouter API key, prompting user if necessary."""
-    env_key = os.environ.get("OPENROUTER_API_KEY")
-    if env_key:
-        return env_key
+    # Try to get from environment or config
+    api_key = os.environ.get("OPENROUTER_API_KEY")
+    if api_key:
+        return api_key
+    
+    # Try project config
+    project_config_path = paths.config_file
+    if project_config_path.is_file():
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        
+        try:
+            with open(project_config_path, "rb") as f:
+                project_config = tomllib.load(f)
+                if "open-router-api-key" in project_config:
+                    return project_config["open-router-api-key"]
+        except Exception:
+            pass
+    
+    # Try user config
+    user_config = load_user_config()
+    if "open-router-api-key" in user_config:
+        return user_config["open-router-api-key"]
 
-    config = _load_config(paths)
-    if config and "open-router-api-key" in config:
-        return config["open-router-api-key"]
-
+    # Prompt user and save to user config
     print("OpenRouter API key not found.")
     print("You can get one from https://openrouter.ai/settings")
     api_key = input("Enter your OpenRouter API key: ").strip()
@@ -56,14 +58,11 @@ def _get_api_key(paths: DefaultPaths) -> str:
         print("Error: API key is required", file=sys.stderr)
         raise typer.Exit(1)
 
-    config_file = paths.config_file
-    config_content = f"""# Zac configuration
-# Get your API key from https://openrouter.ai/settings
-
-open-router-api-key = "{api_key}"
-"""
-    config_file.write_text(config_content)
-    print(f"Config saved to {config_file}")
+    # Save to user config instead of project config
+    user_config = load_user_config()
+    user_config["open-router-api-key"] = api_key
+    save_user_config(user_config)
+    print(f"Config saved to {Path.home() / '.zac' / 'config.toml'}")
     return api_key
 
 
