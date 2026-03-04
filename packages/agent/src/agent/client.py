@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 from typing import Any, AsyncIterator
@@ -114,7 +115,9 @@ class AgentClient:
                     break
 
             if self._abort_event.is_set():
-                yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
+                yield AgentEvent(
+                    type=EventType.TURN_END, context_info=self.context_info()
+                )
                 yield AgentEvent(type=EventType.AGENT_END)
                 return
 
@@ -154,7 +157,9 @@ class AgentClient:
                 async for chunk in stream:
                     if self._abort_event.is_set():
                         await stream.close()
-                        yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
+                        yield AgentEvent(
+                            type=EventType.TURN_END, context_info=self.context_info()
+                        )
                         yield AgentEvent(type=EventType.AGENT_END)
                         return
 
@@ -221,7 +226,9 @@ class AgentClient:
             # Execute tools
             for tc in sorted_tool_calls:
                 if self._abort_event.is_set():
-                    yield AgentEvent(type=EventType.TURN_END, context_info=self.context_info())
+                    yield AgentEvent(
+                        type=EventType.TURN_END, context_info=self.context_info()
+                    )
                     yield AgentEvent(type=EventType.AGENT_END)
                     return
 
@@ -536,7 +543,10 @@ class AgentClient:
         if self._conversation_log_file:
             try:
                 with open(self._conversation_log_file, "a") as f:
-                    f.write(json.dumps({"type": "request", "payload": request_payload}) + "\n")
+                    f.write(
+                        json.dumps({"type": "request", "payload": request_payload})
+                        + "\n"
+                    )
                 logger.info("Logged request to %s", self._conversation_log_file)
             except OSError as e:
                 logger.warning("Failed to write conversation log: %s", e)
@@ -545,7 +555,7 @@ class AgentClient:
             try:
                 # Create the stream
                 stream = await self._client.chat.completions.create(**request_payload)
-                
+
                 # If conversation_log_file is set, accumulate the full response
                 if self._conversation_log_file:
                     response_chunks = []
@@ -556,14 +566,19 @@ class AgentClient:
                     # Log the complete response after streaming is done
                     try:
                         with open(self._conversation_log_file, "a") as f:
-                            f.write(json.dumps({"type": "response", "payload": response_chunks}) + "\n")
+                            f.write(
+                                json.dumps(
+                                    {"type": "response", "payload": response_chunks}
+                                )
+                                + "\n"
+                            )
                     except OSError as e:
                         logger.warning("Failed to write conversation log: %s", e)
                     # Return a dummy stream for the rest of the code to iterate
                     return self._dummy_stream(response_chunks)
                 else:
                     return stream
-                    
+
             except APIStatusError as e:
                 last_error = e
                 if e.status_code not in _RETRYABLE_STATUS_CODES:
@@ -594,5 +609,6 @@ class AgentClient:
         """Yield pre-collected chunks as a dummy stream."""
         # Import here to avoid circular imports
         from openai.types.chat import ChatCompletionChunk
+
         for chunk_dict in chunks:
             yield ChatCompletionChunk(**chunk_dict)
