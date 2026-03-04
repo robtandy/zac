@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 from typing import Any, AsyncIterator
 
 from openai import APIConnectionError, APIStatusError, AsyncOpenAI
@@ -11,12 +12,14 @@ from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 from .config import get_model, get_reasoning_effort, save_model_preferences
 from .events import AgentEvent, EventType
 from .exceptions import AgentError, AgentNotRunning
+from .skills import LoadSkillsResult, format_skills_for_prompt, load_skills
+from .system_prompt import SYSTEM_PROMPT
 from .tools import ToolRegistry, default_tools
 
 logger = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "anthropic/claude-sonnet-4"
-_DEFAULT_SYSTEM_PROMPT = "You are a helpful coding assistant. Use the provided tools to help the user with their tasks."
+_DEFAULT_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 _MAX_RETRIES = 3
 _INITIAL_BACKOFF = 1.0
@@ -33,20 +36,6 @@ _KEEP_RECENT_TOKENS = 20000
 _CHARS_PER_TOKEN = 4
 
 
-def _load_system_prompt() -> str:
-    path = os.environ.get("ZAC_SYSTEM_PROMPT_FILE")
-    if path:
-        try:
-            with open(path) as f:
-                content = f.read().strip()
-            if content:
-                logger.info("Loaded system prompt from %s", path)
-                return content
-        except OSError as e:
-            logger.warning("Failed to read ZAC_SYSTEM_PROMPT_FILE=%s: %s", path, e)
-    return _DEFAULT_SYSTEM_PROMPT
-
-
 class AgentClient:
     """Async agent that streams LLM responses via OpenRouter and executes tools."""
 
@@ -57,10 +46,11 @@ class AgentClient:
         tools: ToolRegistry | None = None,
         reasoning_effort: str = "xhigh",
         conversation_log_file: str | None = None,
+        skills: LoadSkillsResult | None = None,
     ) -> None:
         # Use provided values first, then fall back to saved config
         self._model = model or get_model() or _DEFAULT_MODEL
-        self._system_prompt = system_prompt or _load_system_prompt()
+        self._system_prompt_template = system_prompt or _DEFAULT_SYSTEM_PROMPT
         self._tools = tools or default_tools()
         self._client: AsyncOpenAI | None = None
         self._messages: list[dict[str, Any]] = []
@@ -69,6 +59,33 @@ class AgentClient:
         self._running = False
         self._reasoning_effort = get_reasoning_effort() or reasoning_effort
         self._conversation_log_file = conversation_log_file
+
+        # Load skills and build system prompt
+        self._skills_result = skills or load_skills()
+        self._system_prompt = self._build_system_prompt()
+
+    def _build_system_prompt(self) -> str:
+        """Build system prompt with skills integrated."""
+        prompt = self._system_prompt_template
+
+        # Append skills if read tool is available
+        if self._tools.get("read") is not None:
+            skills_block = format_skills_for_prompt(self._skills_result.skills)
+            if skills_block:
+                prompt += skills_block
+
+        return prompt
+
+    @property
+    def skills(self) -> LoadSkillsResult:
+        """Return the loaded skills result."""
+        return self._skills_result
+
+    def reload_skills(self) -> None:
+        """Reload skills from disk and rebuild system prompt."""
+        self._skills_result = load_skills()
+        self._system_prompt = self._build_system_prompt()
+        logger.info("Reloaded %d skills", len(self._skills_result.skills))
 
     @property
     def running(self) -> bool:

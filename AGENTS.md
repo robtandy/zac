@@ -319,3 +319,87 @@ Do **not** use `pkill -f "python.*gateway"` to kill the gateway during testing. 
 cd /root/zac-dev/packages/gateway
 pytest tests/ -v
 ```
+
+---
+
+## Skills System
+
+### Overview
+Zac implements the [Agent Skills](https://agentskills.io) specification for extensible agent capabilities. Skills are self-contained packages that provide specialized instructions for specific tasks.
+
+### Key Files
+- **`packages/agent/src/agent/skills.py`**: Core skill loading, validation, and prompt generation
+- **`reference/agentskills/`**: Copy of the Agent Skills specification and reference implementation
+
+### Skill Locations
+Skills are loaded from:
+- **Global**: `~/.zac/skills/`
+- **Project**: `.zac/skills/` in the current working directory
+
+### Skill Structure
+A skill is a directory containing `SKILL.md`:
+```
+skill-name/
+├── SKILL.md              # Required: frontmatter + instructions
+├── scripts/              # Optional: helper scripts
+├── references/           # Optional: detailed docs
+└── assets/               # Optional: static resources
+```
+
+### SKILL.md Format
+```yaml
+---
+name: skill-name              # Required: 1-64 chars, lowercase a-z, 0-9, hyphens
+description: What it does     # Required: 1-1024 chars
+license: Apache-2.0           # Optional
+compatibility: Requirements   # Optional: max 500 chars
+disable-model-invocation: true # Optional: hide from system prompt
+---
+# Markdown body with instructions
+```
+
+### System Prompt Integration
+Skills are included in the system prompt using XML format:
+```xml
+<available_skills>
+  <skill>
+    <name>pdf-processing</name>
+    <description>Extract text from PDFs...</description>
+    <location>/path/to/skills/pdf-processing/SKILL.md</location>
+  </skill>
+</available_skills>
+```
+
+Only skill descriptions are in the system prompt. Full content loads on-demand when the agent reads the skill file.
+
+### Agent API
+```python
+from agent.skills import load_skills, format_skills_for_prompt
+
+# Load all skills from default locations
+result = load_skills()
+print(f"Loaded {len(result.skills)} skills")
+
+# Access individual skills
+for skill in result.skills:
+    print(f"  - {skill.name}: {skill.description}")
+
+# Check diagnostics
+for diag in result.diagnostics:
+    print(f"  {diag.type}: {diag.message}")
+
+# Format for system prompt
+prompt_block = format_skills_for_prompt(result.skills)
+```
+
+### Validation Rules
+- Name must match parent directory
+- No leading/trailing/consecutive hyphens
+- Description required (1-1024 chars)
+- Name: lowercase a-z, 0-9, hyphens only
+
+### Testing
+```bash
+cd /root/zac-dev
+.venv/bin/python -m pytest packages/agent/tests/test_skills.py -v
+```
