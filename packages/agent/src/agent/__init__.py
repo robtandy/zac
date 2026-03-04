@@ -3,9 +3,8 @@ from .events import AgentEvent, EventType
 from .exceptions import AgentError, AgentNotRunning, ProcessNotRunning
 from .tools import (
     BashTool,
-    EditTool,  # from .tools_claude_style import (
+    EditTool,
     ReadTool,
-    SearchWebTool,
     Tool,
     ToolDefinition,
     ToolRegistry,
@@ -29,6 +28,5 @@ __all__ = [
     "ReadTool",
     "WriteTool",
     "EditTool",
-    "SearchWebTool",
     "default_tools",
 ]
