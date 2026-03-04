@@ -32,9 +32,6 @@ class AgentEvent(BaseModel):
     message: str = ""
     summary: str = ""
     tokens_before: int = 0
-    html: str = ""
-    url: str = ""
-    image_data: str = ""
     model_info: dict[str, Any] = Field(default_factory=dict)
     context_info: dict[str, Any] = Field(default_factory=dict)
 
