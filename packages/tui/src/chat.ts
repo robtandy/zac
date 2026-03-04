@@ -54,7 +54,6 @@ export class ChatUI {
             }));
         },
       },
-      { name: "reload", description: "Reload the agent and web packages" },
       { name: "reasoning", description: "Show or set reasoning effort (low, medium, high, xhigh)",
         getArgumentCompletions: () => {
           return [
@@ -116,11 +115,6 @@ export class ChatUI {
 
       if (trimmed === "/reasoning" || trimmed.startsWith("/reasoning ")) {
         this.connection.send({ type: "steer", message: trimmed });
-        return;
-      }
-
-      if (trimmed === "/reload") {
-        this.connection.send({ type: "steer", message: "/reload" });
         return;
       }
 
@@ -295,19 +289,6 @@ export class ChatUI {
           this.connection.send({ type: "prompt", message: msg });
         }
         this.inputQueuedDuringCompaction = [];
-        break;
-      }
-
-      case "reload_start":
-        this.setStatus("Reloading...");
-        this.insertBeforeEditor(new Text("[Reloading agent and web packages...]", 1, 0, compactionColor));
-        break;
-
-      case "reload_end": {
-        const color = event.success ? compactionColor : errorColor;
-        this.insertBeforeEditor(new Text(`[${event.message}]`, 0, 0, color));
-        this.insertBeforeEditor(new Spacer(1));
-        this.setStatus("Ready");
         break;
       }
 

@@ -20,7 +20,5 @@ export type ServerEvent =
   | { type: "context_info"; system: number; tools: number; user: number; assistant: number; tool_results: number; context_window: number }
   | { type: "compaction_start" }
   | { type: "compaction_end"; summary: string; tokens_before: number }
-  | { type: "reload_start" }
-  | { type: "reload_end"; success: boolean; message: string }
   | { type: "model_list"; models: { id: string; name: string; description: string }[]; current: string }
   | { type: "model_set"; model: string };

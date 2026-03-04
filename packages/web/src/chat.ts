@@ -85,13 +85,6 @@ export class ChatUI {
       return;
     }
 
-    if (text === "/reload") {
-      this.connection.send({ type: "steer", message: "/reload" });
-      this.inputEl.value = "";
-      this.autoResize();
-      return;
-    }
-
     if (this.isCompacting) {
       this.inputQueuedDuringCompaction.push(text);
       this.addQueuedMessage(text);
@@ -207,28 +200,6 @@ export class ChatUI {
         break;
       }
 
-      case "reload_start": {
-        this.setStatus("Reloading...");
-        const indicator = document.createElement("div");
-        indicator.className = "compaction-indicator";
-        indicator.id = "reload-indicator";
-        indicator.innerHTML = '<div class="compaction-spinner"></div>Reloading agent and web packages...';
-        this.messagesEl.appendChild(indicator);
-        this.scrollToBottom();
-        break;
-      }
-
-      case "reload_end": {
-        const existing = document.getElementById("reload-indicator");
-        if (existing) existing.remove();
-        const banner = document.createElement("div");
-        banner.className = event.success ? "compaction-banner" : "compaction-banner reload-error";
-        banner.textContent = event.message;
-        this.messagesEl.appendChild(banner);
-        this.scrollToBottom();
-        this.setStatus("Ready");
-        break;
-      }
     }
   }
 
