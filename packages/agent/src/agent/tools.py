@@ -331,7 +331,8 @@ class ReadTool(Tool):
         )
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        path = args.get("path", "")
+        # Accept both camelCase (LLM convention) and snake_case (Python convention)
+        path = args.get("path", "") or args.get("file_path", "")
         offset = args.get("offset")  # 1-indexed, optional
         limit = args.get("limit")  # optional
 
@@ -483,9 +484,10 @@ The tool returns a diff of the changes made.
         )
 
     async def execute(self, args: dict[str, Any]) -> ToolResult:
-        path = args.get("path", "")
-        old_text = args.get("oldText", "")
-        new_text = args.get("newText", "")
+        # Accept both camelCase (LLM convention) and snake_case (Python convention)
+        path = args.get("path", "") or args.get("file_path", "")
+        old_text = args.get("oldText", "") or args.get("old_text", "")
+        new_text = args.get("newText", "") or args.get("new_text", "")
 
         if not path:
             return ToolResult(output="No path provided.", is_error=True)

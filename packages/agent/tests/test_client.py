@@ -237,7 +237,7 @@ class TestAgentClientPrompt:
             _make_tool_call_chunk(0, tool_call_id="tc_1", name="bash"),
             _make_tool_call_chunk(0, arguments='{"command": "ls"}'),
             _make_tool_call_chunk(1, tool_call_id="tc_2", name="read"),
-            _make_tool_call_chunk(1, arguments='{"file_path": "f.txt"}'),
+            _make_tool_call_chunk(1, arguments='{"path": "f.txt"}'),
             _make_finish_chunk("tool_calls"),
         ]
         text_chunks = [
@@ -528,7 +528,7 @@ class TestToolUseIntegration:
         # Turn 1: write a file. Turn 2: read it back. Turn 3: text summary.
         mock_openai.chat.completions.create = AsyncMock(side_effect=[
             _tool_call_stream([("tc_1", "write", {"file_path": target, "content": "hello from test"})]),
-            _tool_call_stream([("tc_2", "read", {"file_path": target})]),
+            _tool_call_stream([("tc_2", "read", {"path": target})]),
             _text_stream("File written and verified"),
         ])
 
@@ -558,9 +558,9 @@ class TestToolUseIntegration:
 
         mock_openai.chat.completions.create = AsyncMock(side_effect=[
             _tool_call_stream([("tc_1", "edit", {
-                "file_path": str(target),
-                "old_text": "return 'hello'",
-                "new_text": "return 'goodbye'",
+                "path": str(target),
+                "oldText": "return 'hello'",
+                "newText": "return 'goodbye'",
             })]),
             _text_stream("Updated"),
         ])
@@ -598,7 +598,7 @@ class TestToolUseIntegration:
         mock_openai = await self._start(client)
 
         mock_openai.chat.completions.create = AsyncMock(side_effect=[
-            _tool_call_stream([("tc_1", "read", {"file_path": "/no/such/file.txt"})]),
+            _tool_call_stream([("tc_1", "read", {"path": "/no/such/file.txt"})]),
             _text_stream("File not found, sorry"),
         ])
 
@@ -675,9 +675,9 @@ class TestToolUseIntegration:
 
         mock_openai.chat.completions.create = AsyncMock(side_effect=[
             _tool_call_stream([("tc_1", "edit", {
-                "file_path": str(target),
-                "old_text": "foo",
-                "new_text": "bar",
+                "path": str(target),
+                "oldText": "foo",
+                "newText": "bar",
             })]),
             _text_stream("Edit failed due to ambiguous match"),
         ])
@@ -686,7 +686,7 @@ class TestToolUseIntegration:
 
         tool_end = [e for e in events if e.type == EventType.TOOL_END][0]
         assert tool_end.is_error is True
-        assert "2 times" in tool_end.result
+        assert "2 occurrences" in tool_end.result
 
         # File should be unchanged
         assert target.read_text() == "foo\nfoo\n"
