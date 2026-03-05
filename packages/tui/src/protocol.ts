@@ -12,6 +12,7 @@ export type ServerEvent =
   | { type: "user_message"; message: string }
   | { type: "turn_start" }
   | { type: "text_delta"; delta: string }
+  | { type: "thinking_delta"; delta: string }
   | { type: "tool_start"; tool_name: string; tool_call_id: string; args: Record<string, unknown> }
   | { type: "tool_update"; tool_call_id: string; tool_name: string; partial_result: string }
   | { type: "tool_end"; tool_call_id: string; tool_name: string; result: string; is_error: boolean }

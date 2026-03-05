@@ -1,4 +1,4 @@
-import type { EditorTheme, ImageTheme, MarkdownTheme, SelectListTheme } from "@mariozechner/pi-tui";
+import type { EditorTheme, ImageTheme, MarkdownTheme, SelectListTheme, SettingsListTheme } from "@mariozechner/pi-tui";
 import { highlight, supportsLanguage } from "cli-highlight";
 
 // Color functions - must be defined before use
@@ -150,6 +150,16 @@ export const editorTheme: EditorTheme = {
   selectList: selectListTheme,
 };
 
+export const settingsListTheme: SettingsListTheme = {
+  label: (text: string, selected: boolean) =>
+    selected ? bgGray(white(bold(text))) : white(text),
+  value: (text: string, selected: boolean) =>
+    selected ? bgGray(cyan(bold(text))) : cyan(text),
+  description: (text: string) => gray(text),
+  cursor: yellow("\u2033"),
+  hint: gray,
+};
+
 export const markdownTheme: MarkdownTheme = {
   heading: bold,
   link: cyan,
@@ -185,6 +195,9 @@ export const contextToolResultsColor = blue;
 export const contextFreeColor = gray;
 
 export const compactionColor = cyan;
+
+// Thinking message color (distinct from regular messages)
+export const thinkingColor = purple;
 
 export const imageTheme: ImageTheme = { fallbackColor: gray };
 

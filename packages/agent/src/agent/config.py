@@ -59,17 +59,21 @@ def save_user_config(config: dict[str, Any]) -> None:
     # Build TOML content with comments
     lines = ["# Zac user configuration", ""]
     
-    if "model" in config:
-        lines.append(f'model = "{config["model"]}"')
-    if "reasoning_effort" in config:
-        lines.append(f'reasoning_effort = "{config["reasoning_effort"]}"')
+    # Known string keys
+    for key in ("model", "reasoning_effort"):
+        if key in config and config[key]:
+            lines.append(f'{key} = "{config[key]}"')
     
     # Add any other keys generically
     for key, value in config.items():
         if key not in ("model", "reasoning_effort"):
-            if isinstance(value, str):
+            if isinstance(value, bool):
+                lines.append(f"{key} = {str(value).lower()}")
+            elif isinstance(value, int):
+                lines.append(f"{key} = {value}")
+            elif isinstance(value, str) and value:
                 lines.append(f'{key} = "{value}"')
-            else:
+            elif isinstance(value, float):
                 lines.append(f"{key} = {value}")
     
     _USER_CONFIG_FILE.write_text("\n".join(lines) + "\n")
@@ -154,4 +158,40 @@ def save_model_preferences(model: str, reasoning_effort: str) -> None:
     config = load_user_config()
     config["model"] = model
     config["reasoning_effort"] = reasoning_effort
+    save_user_config(config)
+
+
+# =============================================================================
+# TUI Settings
+# =============================================================================
+
+# Default TUI settings
+DEFAULT_TOOL_RESULT_LINES = 20
+DEFAULT_SHOW_THINKING = True
+
+
+def get_tui_settings() -> dict[str, Any]:
+    """Get TUI settings from user config.
+    
+    Returns a dict with:
+    - tool_result_lines: int - number of lines to show (0 = only header)
+    - show_thinking: bool - whether to show thinking/thinking deltas
+    """
+    user_config = load_user_config()
+    return {
+        "tool_result_lines": user_config.get("tool_result_lines", DEFAULT_TOOL_RESULT_LINES),
+        "show_thinking": user_config.get("show_thinking", DEFAULT_SHOW_THINKING),
+    }
+
+
+def save_tui_settings(tool_result_lines: int | None = None, show_thinking: bool | None = None) -> None:
+    """Save TUI settings to user config.
+    
+    Only updates values that are not None.
+    """
+    config = load_user_config()
+    if tool_result_lines is not None:
+        config["tool_result_lines"] = tool_result_lines
+    if show_thinking is not None:
+        config["show_thinking"] = show_thinking
     save_user_config(config)

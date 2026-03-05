@@ -11,7 +11,26 @@ function getGatewayUrl(): string {
   return process.env.ZAC_GATEWAY_URL ?? "wss://localhost:8765";
 }
 
+function getToolResultLines(): number {
+  const val = process.env.ZAC_TOOL_RESULT_LINES;
+  if (val !== undefined) {
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed) && parsed >= 0) return parsed;
+  }
+  return 20; // default
+}
+
+function getShowThinking(): boolean {
+  const val = process.env.ZAC_SHOW_THINKING;
+  if (val !== undefined) {
+    return val === "1";
+  }
+  return true; // default
+}
+
 const url = getGatewayUrl();
+const toolResultLines = getToolResultLines();
+const showThinking = getShowThinking();
 
 let chatUI: ChatUI | null = null;
 
@@ -28,7 +47,7 @@ const connection = new GatewayConnection({
   },
 });
 
-chatUI = new ChatUI(connection);
+chatUI = new ChatUI(connection, { toolResultLines, showThinking });
 connection.connect();
 chatUI.start();
 

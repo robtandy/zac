@@ -1,11 +1,20 @@
 import { execSync } from "child_process";
-import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
+import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer, CombinedAutocompleteProvider, SettingsList } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
-import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black, highlightCode, getLanguageFromPath } from "./theme.js";
+import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black, highlightCode, getLanguageFromPath, settingsListTheme, thinkingColor } from "./theme.js";
 
-const MAX_RESULT_LINES = 20;
 const MAX_RESULT_CHARS = 4000;
+
+export interface TUISettings {
+  toolResultLines: number;
+  showThinking: boolean;
+}
+
+const DEFAULT_SETTINGS: TUISettings = {
+  toolResultLines: 20,
+  showThinking: true,
+};
 
 export class ChatUI {
   private tui: TUI;
@@ -24,9 +33,13 @@ export class ChatUI {
   private contextInfo: { system: number; tools: number; user: number; assistant: number; tool_results: number; context_window: number } | null = null;
   private compactionCount: number = 0;
   private currentToolArgs: Record<string, unknown> = {};
+  private settings: TUISettings;
+  private currentThinking: string = "";
+  private currentThinkingMarkdown: Markdown | null = null;
 
-  constructor(connection: GatewayConnection) {
+  constructor(connection: GatewayConnection, settings?: Partial<TUISettings>) {
     this.connection = connection;
+    this.settings = { ...DEFAULT_SETTINGS, ...settings };
     const terminal = new ProcessTerminal();
     this.tui = new TUI(terminal);
 
@@ -66,6 +79,7 @@ export class ChatUI {
         },
       },
       { name: "search", description: "Search the web using DuckDuckGo" },
+      { name: "settings", description: "Open settings dialog" },
       { name: "model-info", description: "Show info about a model (price, context length)",
         getArgumentCompletions: (prefix: string) => {
           if (!this.modelList.length) return null;
@@ -139,6 +153,11 @@ export class ChatUI {
         return;
       }
 
+      if (trimmed === "/settings") {
+        this.showSettingsDialog();
+        return;
+      }
+
       if (trimmed.startsWith("!")) {
         const cmd = trimmed.slice(1).trim();
         if (cmd) this.runShellCommand(cmd);
@@ -204,12 +223,19 @@ export class ChatUI {
         this.setStatus("Responding...");
         break;
 
+      case "thinking_delta":
+        if (this.settings.showThinking) {
+          this.currentThinking += event.delta;
+          this.updateThinkingMarkdown();
+        }
+        break;
+
       case "tool_start": {
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
         this.setStatus(`Running tool: ${event.tool_name}`);
         const header = this.formatToolHeader(event.tool_name, event.args);
-        this.insertBeforeEditor(new Text(header, 1, 0, toolColor));
+        this.insertBeforeEditor(new Text(header, 0, 0, toolColor));
         // Store args for syntax highlighting in tool_end
         this.currentToolArgs = event.args;
         if (event.tool_name === "edit") {
@@ -246,6 +272,7 @@ export class ChatUI {
       case "agent_end":
         this.finalizeMarkdown();
         this.finalizeToolMarkdown();
+        this.finalizeThinkingMarkdown();
         this.insertBeforeEditor(new Spacer(1));
         // Update context info from the event if available
         if ("context_info" in event && event.context_info) {
@@ -490,9 +517,14 @@ export class ChatUI {
     if (text.length > MAX_RESULT_CHARS) {
       text = text.slice(0, MAX_RESULT_CHARS) + "\n... (truncated)";
     }
+    const maxLines = this.settings.toolResultLines;
+    // If maxLines is 0, return empty string (only show header)
+    if (maxLines === 0) {
+      return "";
+    }
     const lines = text.split("\n");
-    if (lines.length > MAX_RESULT_LINES) {
-      return lines.slice(0, MAX_RESULT_LINES).join("\n") + "\n... (truncated)";
+    if (lines.length > maxLines) {
+      return lines.slice(0, maxLines).join("\n") + "\n... (truncated)";
     }
     return text;
   }
@@ -535,6 +567,27 @@ export class ChatUI {
     if (this.currentToolMarkdown) {
       this.currentToolMarkdown = null;
       this.currentToolText = "";
+    }
+  }
+
+  private updateThinkingMarkdown(): void {
+    if (!this.currentThinking || !this.settings.showThinking) return;
+
+    if (this.currentThinkingMarkdown) {
+      this.currentThinkingMarkdown.setText(this.currentThinking);
+    } else {
+      this.currentThinkingMarkdown = new Markdown(this.currentThinking, 1, 0, markdownTheme, {
+        color: thinkingColor,
+      });
+      this.insertBeforeEditor(this.currentThinkingMarkdown);
+    }
+    this.tui.requestRender();
+  }
+
+  private finalizeThinkingMarkdown(): void {
+    if (this.currentThinkingMarkdown) {
+      this.currentThinkingMarkdown = null;
+      this.currentThinking = "";
     }
   }
 
@@ -691,6 +744,67 @@ export class ChatUI {
     } else {
       this.setStatus("Reconnecting...");
     }
+  }
+
+  private showSettingsDialog(): void {
+    const settingItems = [
+      {
+        id: "tool_result_lines",
+        label: "Tool result lines",
+        description: "Number of lines to show (0 = only header)",
+        currentValue: String(this.settings.toolResultLines),
+        values: ["0", "5", "10", "20", "50", "100"],
+      },
+      {
+        id: "show_thinking",
+        label: "Show thinking",
+        description: "Display model's thinking process",
+        currentValue: this.settings.showThinking ? "On" : "Off",
+        values: ["On", "Off"],
+      },
+    ];
+
+    const settingsList = new SettingsList(
+      settingItems,
+      10,
+      settingsListTheme,
+      (id: string, newValue: string) => {
+        if (id === "tool_result_lines") {
+          this.settings.toolResultLines = parseInt(newValue, 10);
+        } else if (id === "show_thinking") {
+          this.settings.showThinking = newValue === "On";
+        }
+        // Note: Settings are saved to config when dialog is dismissed (ESC)
+        // Don't save on each change - user may want to change multiple settings
+      },
+      () => {
+        // Save settings when user dismisses dialog with ESC
+        void this.saveSettingsToConfig();
+        this.tui.hideOverlay();
+      }
+    );
+
+    // Full-screen modal dialog
+    this.tui.showOverlay(settingsList, { width: "100%", margin: 1 });
+  }
+
+  private async saveSettingsToConfig(): Promise<void> {
+    // Use child_process to call Python config save
+    const { spawn } = await import("child_process");
+    const showThinkingPy = this.settings.showThinking ? "True" : "False";
+    const pythonScript = `
+import sys
+sys.path.insert(0, '${process.cwd()}/packages/agent/src')
+from agent.config import save_tui_settings
+save_tui_settings(${this.settings.toolResultLines}, ${showThinkingPy})
+`;
+    const proc = spawn("python3", ["-c", pythonScript], {
+      cwd: process.cwd(),
+      stdio: "pipe",
+    });
+    proc.stderr.on("data", (data) => {
+      console.error("Config error:", data.toString().trim());
+    });
   }
 
   start(): void {
