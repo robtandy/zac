@@ -43,6 +43,13 @@ def main():
         (now, args.issue_id)
     )
     
+    # If user adds a comment, set status to OPEN (ready for Zac to work on again)
+    if args.author == "user":
+        cursor.execute(
+            "UPDATE issues SET status = 'OPEN' WHERE id = ? AND status = 'INPUT_REQUIRED'",
+            (args.issue_id,)
+        )
+    
     conn.commit()
     comment_id = cursor.lastrowid
     conn.close()
