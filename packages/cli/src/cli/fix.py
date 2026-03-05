@@ -22,7 +22,7 @@ from .paths import DefaultPaths
 app = typer.Typer(help="Fix local issues automatically")
 
 DEFAULT_MAX_COST = 5.0
-DEFAULT_DB_PATH = "/root/zac-dev/.zac/ISSUES.db"
+DEFAULT_DB_PATH = ".zac/ISSUES.db"
 
 
 def _get_api_key(paths: DefaultPaths) -> str:

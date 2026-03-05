@@ -16,7 +16,7 @@ def main():
                         help="Issue status (default: OPEN)")
     args = parser.parse_args()
 
-    db_path = "/root/zac-dev/.zac/ISSUES.db"
+    db_path = ".zac/ISSUES.db"
     
     # Create DB and table if they don't exist
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
