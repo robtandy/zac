@@ -1,12 +1,13 @@
-"""Fix mode - automatically fix GitHub issues."""
+"""Fix mode - automatically fix local issues."""
 
 from __future__ import annotations
 
 import asyncio
-import json
 import os
+import sqlite3
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -18,9 +19,10 @@ from agent.events import EventType
 
 from .paths import DefaultPaths
 
-app = typer.Typer(help="Fix GitHub issues automatically")
+app = typer.Typer(help="Fix local issues automatically")
 
 DEFAULT_MAX_COST = 5.0
+DEFAULT_DB_PATH = "/root/zac-dev/.zac/ISSUES.db"
 
 
 def _get_api_key(paths: DefaultPaths) -> str:
@@ -47,84 +49,54 @@ def _get_api_key(paths: DefaultPaths) -> str:
 
 
 def _get_open_issues(
-    repo: str,
+    db_path: str,
     max_issues: Optional[int] = None,
 ) -> list[dict]:
-    """Get open issues that don't have an attached PR."""
-    # Get issues with JSON output
-    cmd = ["gh", "issue", "list", "--state", "open", "--json", "number,title,body,url"]
+    """Get open issues from the local SQLite database."""
+    if not os.path.exists(db_path):
+        return []
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, title, description, status, created_at, updated_at FROM issues WHERE status = ? ORDER BY created_at ASC",
+        ("OPEN",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    issues = []
+    for row in rows:
+        issues.append({
+            "id": row["id"],
+            "title": row["title"],
+            "description": row["description"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        })
+
     if max_issues:
-        cmd.extend(["--limit", str(max_issues)])
+        issues = issues[:max_issues]
 
-    result = subprocess.run(
-        cmd,
-        cwd=Path.cwd(),
-        capture_output=True,
-        text=True,
-        check=True,
+    return issues
+
+
+def _update_issue_status(db_path: str, issue_id: int, status: str) -> None:
+    """Update the status of an issue in the database."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    now = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "UPDATE issues SET status = ?, updated_at = ? WHERE id = ?",
+        (status, now, issue_id),
     )
 
-    issues = json.loads(result.stdout)
-
-    # Filter out issues that have PRs attached (check each issue for linked PRs)
-    filtered_issues = []
-    for issue in issues:
-        # Check if issue has a linked PR using the API
-        # The "pull_request" field is null if no PR is linked
-        pr_check = subprocess.run(
-            ["gh", "api", f"repos/{repo}/issues/{issue['number']}"],
-            cwd=Path.cwd(),
-            capture_output=True,
-            text=True,
-        )
-        if pr_check.returncode == 0:
-            pr_data = json.loads(pr_check.stdout)
-            # If pull_request is null, there's no PR attached
-            if pr_data.get("pull_request") is None:
-                filtered_issues.append(issue)
-
-    return filtered_issues
-
-
-def _get_issue_comments(issue_number: int) -> list[dict]:
-    """Get comments on an issue."""
-    result = subprocess.run(
-        ["gh", "issue", "view", str(issue_number), "--json", "comments"],
-        cwd=Path.cwd(),
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        data = json.loads(result.stdout)
-        return data.get("comments", [])
-    return []
-
-
-def _has_unresolved_conversations(issue_number: int) -> bool:
-    """Check if issue has unresolved conversations (comments after issue was closed)."""
-    # Get issue state and comments
-    result = subprocess.run(
-        ["gh", "issue", "view", str(issue_number), "--json", "state,comments"],
-        cwd=Path.cwd(),
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        data = json.loads(result.stdout)
-        comments = data.get("comments", [])
-        # For now, consider any issue with comments as having potential conversations
-        # A more sophisticated check could look at comment timestamps vs issue close time
-        return len(comments) > 0
-    return False
-
-
-def _comment_on_issue(issue_number: int, body: str) -> None:
-    """Add a comment to an issue."""
-    subprocess.run(
-        ["gh", "issue", "comment", str(issue_number), "--body", body],
-        cwd=Path.cwd(),
-        check=True,
-    )
+    conn.commit()
+    conn.close()
 
 
 def _create_worktree(branch_name: str) -> Path:
@@ -134,6 +106,9 @@ def _create_worktree(branch_name: str) -> Path:
     # Remove existing worktree if it exists
     if worktree_path.exists():
         subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)], check=True)
+    
+    # Remove existing branch if it exists
+    subprocess.run(["git", "branch", "-D", branch_name], capture_output=True)
 
     # Create new worktree with new branch
     subprocess.run(
@@ -150,7 +125,7 @@ def _get_fix_system_prompt() -> str:
 
 # FIX MODE - Autonomous Issue Fixing
 
-You are now operating in FIX MODE. Your goal is to automatically fix GitHub issues in this repository.
+You are now operating in FIX MODE. Your goal is to automatically fix local issues in this repository.
 
 ## Your Mission
 
@@ -175,7 +150,7 @@ You are working in a **separate git worktree** created specifically for this fix
 ## Workflow
 
 ### 1. Understand the Issue
-- Use `gh issue view <number>` to see full issue details
+- Read the issue description carefully
 - Read the relevant code to understand what the issue describes
 - Identify the files and functions that need to be modified
 
@@ -198,7 +173,6 @@ You are working in a **separate git worktree** created specifically for this fix
 - Commit your changes with a descriptive message
 - Push the branch to the remote
 - Create a PR with a clear description of the fix
-- Link the PR to the issue using "Fixes #<number>" or "Closes #<number>"
 
 ## Cost Management
 
@@ -206,20 +180,12 @@ You are working in a **separate git worktree** created specifically for this fix
 - If costs exceed the specified limit, you should stop and report
 - Be efficient: understand the issue quickly, don't over-engineer the fix
 
-## Asking for Help
-
-If you cannot determine something and need user input:
-- Comment on the GitHub issue
-- Include "Zac: " at the start of your comment so we know you wrote it
-- Ask a clear, specific question
-
 ## Important Rules
 
-1. **Do not fix issues with unresolved conversations** - Skip any issue that has comments that haven't been addressed
-2. **Work in the worktree** - All code changes should be in the worktree directory
-3. **Test your changes** - Always verify fixes work before submitting PR
-4. **Be concise** - Don't add unnecessary changes or over-engineer solutions
-5. **Respect the cost limit** - Stop if API costs exceed the threshold
+1. **Work in the worktree** - All code changes should be in the worktree directory
+2. **Test your changes** - Always verify fixes work before submitting PR
+3. **Be concise** - Don't add unnecessary changes or over-engineer solutions
+4. **Respect the cost limit** - Stop if API costs exceed the threshold
 
 ## Tools Available
 
@@ -238,35 +204,16 @@ async def _run_fix_mode(
     max_issues: Optional[int],
     model: Optional[str],
     reasoning_effort: Optional[str] = None,
+    db_path: str = DEFAULT_DB_PATH,
 ) -> None:
-    """Run fix mode - iterate through issues and fix them."""
+    """Run fix mode - iterate through local issues and fix them."""
 
-    # Get repo from git remote
-    result = subprocess.run(
-        ["git", "remote", "get-url", "origin"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        print("Error: Not in a git repository", file=sys.stderr)
-        raise typer.Exit(1)
+    print(f"Database: {db_path}")
 
-    remote_url = result.stdout.strip()
-    # Extract owner/repo from git@github.com:owner/repo.git or https://github.com/owner/repo.git
-    if remote_url.startswith("git@github.com:"):
-        repo = remote_url.replace("git@github.com:", "").replace(".git", "")
-    elif "github.com/" in remote_url:
-        repo = remote_url.split("github.com/")[-1].replace(".git", "")
-    else:
-        print(f"Error: Could not determine GitHub repo from remote: {remote_url}", file=sys.stderr)
-        raise typer.Exit(1)
-
-    print(f"Repository: {repo}")
-
-    # Get open issues
+    # Get open issues from local database
     print("Fetching open issues...")
-    issues = _get_open_issues(repo, max_issues)
-    print(f"Found {len(issues)} open issues without PRs")
+    issues = _get_open_issues(db_path, max_issues)
+    print(f"Found {len(issues)} open issues")
 
     if not issues:
         print("No issues to fix!")
@@ -280,18 +227,13 @@ async def _run_fix_mode(
     total_cost = 0.0
 
     for i, issue in enumerate(issues):
-        issue_number = issue["number"]
+        issue_id = issue["id"]
         issue_title = issue["title"]
-        issue_url = issue["url"]
+        issue_description = issue["description"]
 
         print(f"\n{'='*60}")
-        print(f"Issue #{issue_number}: {issue_title}")
+        print(f"Issue #{issue_id}: {issue_title}")
         print(f"{'='*60}")
-
-        # Check for unresolved conversations
-        if _has_unresolved_conversations(issue_number):
-            print(f"Skipping issue #{issue_number} - has unresolved conversations")
-            continue
 
         # Check cost
         if total_cost >= max_cost:
@@ -299,26 +241,22 @@ async def _run_fix_mode(
             break
 
         # Create worktree for this fix
-        branch_name = f"fix/issue-{issue_number}"
+        branch_name = f"fix/issue-{issue_id}"
         try:
             worktree_path = _create_worktree(branch_name)
             print(f"Created worktree at {worktree_path}")
         except Exception as e:
             print(f"Error creating worktree: {e}")
-            _comment_on_issue(
-                issue_number,
-                f"Zac: I was unable to create a worktree for this fix. Error: {e}"
-            )
+            _update_issue_status(db_path, issue_id, "INPUT_REQUIRED")
             continue
 
         # Build the prompt for this issue
-        fix_prompt = f"""Please fix GitHub issue #{issue_number}.
+        fix_prompt = f"""Please fix local issue #{issue_id}.
 
 Issue Title: {issue_title}
-Issue URL: {issue_url}
 
 The issue description is:
-{issue.get('body', 'No description provided.')}
+{issue_description}
 
 Your task is to:
 1. Understand the issue
@@ -365,7 +303,7 @@ Good luck!
             print(f"Estimated cost for this issue: ${estimated_cost:.4f}")
             print(f"Total cost so far: ${total_cost:.4f}")
 
-            # Comment on the issue with the result
+            # Update issue status based on result
             if "PR #" in response_text or "pull request" in response_text.lower():
                 # Extract PR URL if possible
                 pr_url = ""
@@ -375,18 +313,18 @@ Good luck!
                         break
 
                 if pr_url:
-                    _comment_on_issue(issue_number, f"Zac: I've attempted to fix this issue. {pr_url}")
+                    print(f"Issue #{issue_id} fixed. PR: {pr_url}")
+                    _update_issue_status(db_path, issue_id, "CLOSED")
                 else:
-                    _comment_on_issue(issue_number, "Zac: I've attempted to fix this issue. Please check the recently created pull request.")
+                    print(f"Issue #{issue_id} fixed. PR created.")
+                    _update_issue_status(db_path, issue_id, "CLOSED")
             else:
-                _comment_on_issue(issue_number, "Zac: I was unable to complete this fix. I've documented my attempt in the worktree.")
+                print(f"Issue #{issue_id} could not be completed.")
+                _update_issue_status(db_path, issue_id, "INPUT_REQUIRED")
 
         except Exception as e:
-            print(f"Error processing issue #{issue_number}: {e}")
-            _comment_on_issue(
-                issue_number,
-                f"Zac: I encountered an error while trying to fix this issue: {e}"
-            )
+            print(f"Error processing issue #{issue_id}: {e}")
+            _update_issue_status(db_path, issue_id, "INPUT_REQUIRED")
         finally:
             await client.stop()
 
@@ -401,6 +339,7 @@ def fix(
     max_issues: Annotated[Optional[int], typer.Option("--max-issues", help="Maximum number of issues to attempt")] = None,
     model: Annotated[Optional[str], typer.Option("--model", help="Model ID")] = None,
     reasoning_effort: Annotated[Optional[str], typer.Option("--reasoning", help="Reasoning effort (low, medium, high, xhigh)")] = None,
+    db: Annotated[str, typer.Option("--db", help="Path to issues database")] = DEFAULT_DB_PATH,
 ) -> None:
-    """Fix GitHub issues automatically."""
-    asyncio.run(_run_fix_mode(max_cost, max_issues, model, reasoning_effort))
+    """Fix local issues automatically."""
+    asyncio.run(_run_fix_mode(max_cost, max_issues, model, reasoning_effort, db))
