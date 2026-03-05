@@ -409,7 +409,7 @@ export class ChatUI {
         return `[bash] $ ${display}`;
       }
       case "read": {
-        const path = typeof args.file_path === "string" ? args.file_path : "";
+        const path = typeof args.path === "string" ? args.path : "";
         let detail = path;
         if (args.offset || args.limit) {
           const parts: string[] = [];
@@ -425,7 +425,7 @@ export class ChatUI {
         return `[write] ${path} (${content.length} bytes)`;
       }
       case "edit": {
-        const path = typeof args.file_path === "string" ? args.file_path : "";
+        const path = typeof args.path === "string" ? args.path : "";
         return `[edit] ${path}`;
       }
       default: {

@@ -5,13 +5,13 @@ from __future__ import annotations
 import os
 import random
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Optional
 
 import typer
 
 from agent.config import get_api_key as _get_api_key_from_config, save_user_config, load_user_config
 
-from . import daemon, tui
+from . import daemon, tui, fix
 from .paths import DefaultPaths
 
 DEFAULT_HOST = "0.0.0.0"
@@ -254,6 +254,22 @@ def gateway_restart(
         conversation_log=conversation_log,
         api_key=api_key,
     )
+
+
+# Add fix command directly to main app
+from .fix import _run_fix_mode as run_fix
+
+
+@app.command("fix")
+def fix(
+    max_cost: Annotated[float, typer.Option("--max-cost", help="Maximum API cost in dollars")] = 5.0,
+    max_issues: Annotated[Optional[int], typer.Option("--max-issues", help="Maximum number of issues to attempt")] = None,
+    model: Annotated[Optional[str], typer.Option("--model", help="Model ID")] = None,
+    reasoning_effort: Annotated[Optional[str], typer.Option("--reasoning", help="Reasoning effort (low, medium, high, xhigh)")] = None,
+) -> None:
+    """Fix GitHub issues automatically."""
+    import asyncio
+    asyncio.run(run_fix(max_cost, max_issues, model, reasoning_effort))
 
 
 def main(argv: list[str] | None = None) -> None:
