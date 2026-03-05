@@ -174,12 +174,13 @@ For each issue assigned to you:
 
 ## Issue Comments
 
-You can add comments to an issue by starting your response with "Zac: " followed by your question. The system will:
-1. Add your comment to the issue
-2. Change the issue status to INPUT_REQUIRED (so you don't work on it while waiting)
-3. Stop working on this issue until the user provides an answer
+When you need clarification from the user, just ask your question. The system will:
+1. Detect that you need clarification (by analyzing your response)
+2. Add your response as a comment to the issue
+3. Change the issue status to INPUT_REQUIRED (so you don't work on it while waiting)
+4. Stop working on this issue until the user provides an answer
 
-When you need clarification from the user, add a comment starting with "Zac: " and the system will handle adding it to the database and updating the status.
+You can also check existing comments on the issue to see previous questions and answers.
 
 ## Operating Environment
 
@@ -227,7 +228,7 @@ You are working in a **separate git worktree** created specifically for this fix
 
 ## Important Rules
 
-1. **Ask clarifying questions using "Zac: " prefix** - This will add a comment and set status to INPUT_REQUIRED
+1. **Ask clarifying questions when needed** - The system will detect your need for clarification and add your question as a comment
 2. **Work in the worktree** - All code changes should be in the worktree directory
 3. **Test your changes** - Always verify fixes work before submitting PR
 4. **Be concise** - Don't add unnecessary changes or over-engineer solutions
@@ -363,16 +364,18 @@ Good luck!
             print(f"Estimated cost for this issue: ${estimated_cost:.4f}")
             print(f"Total cost so far: ${total_cost:.4f}")
 
-            # Check if Zac needs clarification (starts with "Zac: ")
-            lines = response_text.strip().split('\n')
-            if any(line.strip().startswith("Zac: ") for line in lines):
-                # Extract the question(s) and add as comments
-                for line in lines:
-                    if line.strip().startswith("Zac: "):
-                        question = line.strip()[5:]  # Remove "Zac: " prefix
-                        _add_comment(db_path, issue_id, question, "zac")
+            # Check if Zac needs clarification by looking for questions
+            # If the response contains a question mark and seems to be asking for input
+            needs_clarification = "?" in response_text and any(
+                keyword in response_text.lower() 
+                for keyword in ["should", "could", "would", "what", "how", "which", "prefer", "clarify"]
+            )
+            
+            if needs_clarification:
+                # Add entire response as a comment from zac
+                _add_comment(db_path, issue_id, response_text.strip(), "zac")
                 _update_issue_status(db_path, issue_id, "INPUT_REQUIRED")
-                print(f"Issue #{issue_id} needs clarification. Added comment(s) and set status to INPUT_REQUIRED.")
+                print(f"Issue #{issue_id} needs clarification. Added comment and set status to INPUT_REQUIRED.")
             # Update issue status based on result
             elif "PR #" in response_text or "pull request" in response_text.lower():
                 # Extract PR URL if possible
