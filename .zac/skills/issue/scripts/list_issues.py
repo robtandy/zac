@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description="List local issues")
     parser.add_argument("--status", choices=["OPEN", "CLOSED", "INPUT_REQUIRED"], 
                         help="Filter by status")
-    parser.add_argument("--format", default="markdown", choices=["markdown", "json"],
+    parser.add_argument("--format", default="markdown", choices=["markdown", "json", "simple"],
                         help="Output format")
     args = parser.parse_args()
 
@@ -47,11 +47,22 @@ def main():
         print(json.dumps(issues, indent=2))
         return
 
-    # Markdown table format
-    print("| ID | Title | Status | Created |")
-    print("|----|-------|--------|---------|")
+    if args.format == "simple":
+        # Simple table without description
+        print("| ID | Title | Status | Created |")
+        print("|----|-------|--------|---------|")
+        for row in rows:
+            print(f"| {row['id']} | {row['title']} | {row['status']} | {row['created_at'][:10]} |")
+        return
+
+    # Markdown format with descriptions
     for row in rows:
-        print(f"| {row['id']} | {row['title']} | {row['status']} | {row['created_at'][:10]} |")
+        print(f"## Issue #{row['id']}")
+        print(f"**Title:** {row['title']}")
+        print(f"**Status:** {row['status']}")
+        print(f"**Created:** {row['created_at'][:10]}")
+        print(f"**Description:** {row['description']}")
+        print()
 
 
 if __name__ == "__main__":

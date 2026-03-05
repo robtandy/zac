@@ -48,19 +48,22 @@ The script accepts:
 
 ## List Issues
 
-Run the list issues script to display issues in markdown table format:
+Run the list issues script to display issues:
 
 ```bash
-.zac/skills/issue/scripts/list_issues.py [--status OPEN|CLOSED|INPUT_REQUIRED] [--format markdown|json]
+.zac/skills/issue/scripts/list_issues.py [--status OPEN|CLOSED|INPUT_REQUIRED] [--format markdown|json|simple]
 ```
 
 The script accepts:
 - `--status` - Filter by status (optional)
-- `--format` - Output format: markdown (default) or json
+- `--format` - Output format:
+  - `markdown` (default) - Shows detailed info with descriptions
+  - `simple` - Compact table without descriptions
+  - `json` - JSON output
 
 ### Examples
 
-List all issues:
+List all issues with descriptions:
 ```bash
 .zac/skills/issue/scripts/list_issues.py
 ```
@@ -70,7 +73,12 @@ List only open issues:
 .zac/skills/issue/scripts/list_issues.py --status OPEN
 ```
 
-List issues in JSON format:
+List in simple table format:
+```bash
+.zac/skills/issue/scripts/list_issues.py --format simple
+```
+
+List in JSON format:
 ```bash
 .zac/skills/issue/scripts/list_issues.py --format json
 ```
