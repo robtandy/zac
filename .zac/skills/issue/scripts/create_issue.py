@@ -35,6 +35,18 @@ def main():
         )
     """)
     
+    # Create comments table if it doesn't exist
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            body TEXT NOT NULL,
+            author TEXT NOT NULL DEFAULT 'user',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE
+        )
+    """)
+    
     # Insert the new issue
     now = datetime.now(timezone.utc).isoformat()
     cursor.execute(
