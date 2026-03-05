@@ -258,6 +258,7 @@ def gateway_restart(
 
 # Add fix command directly to main app
 from .fix import _run_fix_mode as run_fix
+from .fix import DEFAULT_DB_PATH
 
 
 @app.command("fix")
@@ -266,10 +267,12 @@ def fix(
     max_issues: Annotated[Optional[int], typer.Option("--max-issues", help="Maximum number of issues to attempt")] = None,
     model: Annotated[Optional[str], typer.Option("--model", help="Model ID")] = None,
     reasoning_effort: Annotated[Optional[str], typer.Option("--reasoning", help="Reasoning effort (low, medium, high, xhigh)")] = None,
+    db: Annotated[str, typer.Option("--db", help="Path to issues database")] = DEFAULT_DB_PATH,
+    issue: Annotated[Optional[int], typer.Option("--issue", help="Target a specific issue by ID")] = None,
 ) -> None:
     """Fix GitHub issues automatically."""
     import asyncio
-    asyncio.run(run_fix(max_cost, max_issues, model, reasoning_effort))
+    asyncio.run(run_fix(max_cost, max_issues, model, reasoning_effort, db, issue))
 
 
 def main(argv: list[str] | None = None) -> None:
