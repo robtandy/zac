@@ -30,10 +30,17 @@ def main():
             title TEXT NOT NULL,
             description TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'OPEN',
+            cost REAL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )
     """)
+    
+    # Add cost column if it doesn't exist (for existing databases)
+    try:
+        cursor.execute("ALTER TABLE issues ADD COLUMN cost REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     
     # Create comments table if it doesn't exist
     cursor.execute("""

@@ -26,12 +26,12 @@ def main():
 
     if args.status:
         cursor.execute(
-            "SELECT id, title, description, status, created_at FROM issues WHERE status = ? ORDER BY id ASC",
+            "SELECT id, title, description, status, cost, created_at FROM issues WHERE status = ? ORDER BY id ASC",
             (args.status,),
         )
     else:
         cursor.execute(
-            "SELECT id, title, description, status, created_at FROM issues ORDER BY id ASC"
+            "SELECT id, title, description, status, cost, created_at FROM issues ORDER BY id ASC"
         )
     
     rows = cursor.fetchall()
@@ -48,18 +48,22 @@ def main():
         return
 
     if args.format == "simple":
-        # Simple table without description
-        print("| ID | Title | Status | Created |")
-        print("|----|-------|--------|---------|")
+        # Simple table with description
+        print("| ID | Title | Status | Cost | Description |")
+        print("|----|-------|--------|------|-------------|")
         for row in rows:
-            print(f"| {row['id']} | {row['title']} | {row['status']} | {row['created_at'][:10]} |")
+            desc = row['description'][:40] + "..." if len(row['description']) > 40 else row['description']
+            cost = f"${row['cost']:.4f}" if row['cost'] else "$0.0000"
+            print(f"| {row['id']} | {row['title']} | {row['status']} | {cost} | {desc} |")
         return
 
     # Markdown format with descriptions
     for row in rows:
+        cost = f"${row['cost']:.4f}" if row['cost'] else "$0.0000"
         print(f"## Issue #{row['id']}")
         print(f"**Title:** {row['title']}")
         print(f"**Status:** {row['status']}")
+        print(f"**Cost:** {cost}")
         print(f"**Created:** {row['created_at'][:10]}")
         print(f"**Description:** {row['description']}")
         print()

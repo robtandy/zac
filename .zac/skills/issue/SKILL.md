@@ -92,7 +92,7 @@ The script accepts:
 - `--status` - Filter by status (optional)
 - `--format` - Output format:
   - `markdown` (default) - Shows detailed info with descriptions
-  - `simple` - Compact table without descriptions
+  - `simple` - Compact table with truncated descriptions
   - `json` - JSON output
 
 ### Examples
@@ -105,6 +105,33 @@ List all issues with descriptions:
 List only open issues:
 ```bash
 .zac/skills/issue/scripts/list_issues.py --status OPEN
+```
+
+---
+
+## Update Issue Cost
+
+Run the update issue cost script to set or add cost to an issue:
+
+```bash
+.zac/skills/issue/scripts/update_issue_cost.py <issue_id> <cost> [--add]
+```
+
+The script accepts:
+- `issue_id` - Issue ID to update (required)
+- `cost` - Cost value (required)
+- `--add` - Add to existing cost instead of replacing (optional)
+
+### Examples
+
+Set cost to $1.50 for issue #3:
+```bash
+.zac/skills/issue/scripts/update_issue_cost.py 3 1.50
+```
+
+Add $0.25 to existing cost for issue #3:
+```bash
+.zac/skills/issue/scripts/update_issue_cost.py 3 0.25 --add
 ```
 
 ---
@@ -157,8 +184,8 @@ The script accepts:
 ## Notes
 
 - The database is located at `.zac/ISSUES.db` (relative to the current directory)
-- Issues are created with status `OPEN` by default
-- The table includes `created_at` and `updated_at` timestamps
+- Issues are created with status `OPEN` and cost `$0.00` by default
+- The table includes `cost`, `created_at` and `updated_at` fields
 - Comments have a foreign key to the issue
 - When Zac adds a comment (author=`zac`), the issue status is set to `INPUT_REQUIRED`
 - When a user adds a comment (author=`user`), the issue status is set to `OPEN` (if it was `INPUT_REQUIRED`)
