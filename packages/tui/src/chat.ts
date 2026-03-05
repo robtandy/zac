@@ -229,8 +229,9 @@ export class ChatUI {
         this.finalizeToolMarkdown();
         if (event.result) {
           const truncated = this.truncateResult(event.result);
-          const md = new Markdown("```\n" + truncated + "\n```", 0, 0, markdownTheme);
-          this.insertBeforeEditor(md);
+          // Use Text component for better display of tool output
+          const text = new Text(truncated, 0, 0, toolDimColor);
+          this.insertBeforeEditor(text);
         }
         const status = event.is_error ? "error" : "done";
         const color = event.is_error ? errorColor : statusColor;
@@ -480,7 +481,8 @@ export class ChatUI {
   private updateToolMarkdown(): void {
     if (!this.currentToolText) return;
 
-    const display = "```\n" + this.truncateResult(this.currentToolText) + "\n```";
+    const display = this.truncateResult(this.currentToolText);
+    // Use Text component for better display of tool output
     if (this.currentToolMarkdown) {
       this.currentToolMarkdown.setText(display);
     } else {
@@ -520,15 +522,17 @@ export class ChatUI {
         timeout: 30_000,
       });
       if (output.trim()) {
-        const md = new Markdown("```\n" + output.trimEnd() + "\n```", 0, 0, markdownTheme);
-        this.insertBeforeEditor(md);
+        // Use Text component for better display of command output
+        const text = new Text(output.trimEnd(), 0, 0, toolDimColor);
+        this.insertBeforeEditor(text);
       }
     } catch (err: any) {
       // execSync throws on non-zero exit; stdout/stderr are on the error object
       const output = (err.stdout ?? "") + (err.stderr ?? "");
       if (output.trim()) {
-        const md = new Markdown("```\n" + output.trimEnd() + "\n```", 0, 0, markdownTheme);
-        this.insertBeforeEditor(md);
+        // Use Text component for better display of command output
+        const text = new Text(output.trimEnd(), 0, 0, toolDimColor);
+        this.insertBeforeEditor(text);
       } else {
         this.insertBeforeEditor(new Text(err.message ?? "Command failed", 0, 0, errorColor));
       }
