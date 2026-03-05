@@ -62,10 +62,18 @@ tmux -L zac-socket new-session -d -s zac-fix '.venv/bin/zac fix --max-cost <cost
 - `--model`: Model ID to use (optional)
 - `--reasoning`: Reasoning effort - low, medium, high, xhigh (optional)
 - `--db`: Path to issues database (default: .zac/ISSUES.db)
+- `--issue`: Target a specific issue by ID (optional)
 
 ### Example
 
 ```bash
+# Fix all open issues (up to cost limit)
+tmux -L zac-socket new-session -d -s zac-fix '.venv/bin/zac fix --max-cost 1'
+
+# Fix a specific issue by ID
+tmux -L zac-socket new-session -d -s zac-fix '.venv/bin/zac fix --issue 42'
+
+# Fix with specific model and reasoning effort
 tmux -L zac-socket new-session -d -s zac-fix '.venv/bin/zac fix --max-cost 1 --max-issues 1 --model minimax/minimax-m2.5 --reasoning xhigh'
 ```
 

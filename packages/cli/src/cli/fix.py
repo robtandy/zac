@@ -51,6 +51,7 @@ def _get_api_key(paths: DefaultPaths) -> str:
 def _get_open_issues(
     db_path: str,
     max_issues: Optional[int] = None,
+    issue_id: Optional[int] = None,
 ) -> list[dict]:
     """Get open issues from the local SQLite database."""
     if not os.path.exists(db_path):
@@ -59,6 +60,27 @@ def _get_open_issues(
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
+
+    # If a specific issue ID is provided, fetch only that issue
+    if issue_id is not None:
+        cursor.execute(
+            "SELECT id, title, description, status, created_at, updated_at FROM issues WHERE id = ?",
+            (issue_id,),
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            return []
+
+        return [{
+            "id": row["id"],
+            "title": row["title"],
+            "description": row["description"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }]
 
     cursor.execute(
         "SELECT id, title, description, status, created_at, updated_at FROM issues WHERE status = ? ORDER BY created_at ASC",
@@ -252,6 +274,7 @@ async def _run_fix_mode(
     model: Optional[str],
     reasoning_effort: Optional[str] = None,
     db_path: str = DEFAULT_DB_PATH,
+    issue_id: Optional[int] = None,
 ) -> None:
     """Run fix mode - iterate through local issues and fix them."""
 
@@ -259,8 +282,12 @@ async def _run_fix_mode(
 
     # Get open issues from local database
     print("Fetching open issues...")
-    issues = _get_open_issues(db_path, max_issues)
+    issues = _get_open_issues(db_path, max_issues, issue_id)
     print(f"Found {len(issues)} open issues")
+
+    if issue_id is not None and not issues:
+        print(f"Issue #{issue_id} not found or not accessible.")
+        return
 
     if not issues:
         print("No issues to fix!")
@@ -413,6 +440,7 @@ def fix(
     model: Annotated[Optional[str], typer.Option("--model", help="Model ID")] = None,
     reasoning_effort: Annotated[Optional[str], typer.Option("--reasoning", help="Reasoning effort (low, medium, high, xhigh)")] = None,
     db: Annotated[str, typer.Option("--db", help="Path to issues database")] = DEFAULT_DB_PATH,
+    issue: Annotated[Optional[int], typer.Option("--issue", help="Target a specific issue by ID")] = None,
 ) -> None:
     """Fix local issues automatically."""
-    asyncio.run(_run_fix_mode(max_cost, max_issues, model, reasoning_effort, db))
+    asyncio.run(_run_fix_mode(max_cost, max_issues, model, reasoning_effort, db, issue))
