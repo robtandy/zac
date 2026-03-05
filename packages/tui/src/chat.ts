@@ -2,7 +2,7 @@ import { execSync } from "child_process";
 import { TUI, ProcessTerminal, Editor, Markdown, Text, Spacer, CombinedAutocompleteProvider } from "@mariozechner/pi-tui";
 import type { GatewayConnection } from "./connection.js";
 import type { ServerEvent } from "./protocol.js";
-import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black } from "./theme.js";
+import { editorTheme, imageTheme, markdownTheme, statusColor, statusBarColor, errorColor, userMsgColor, toolColor, toolDimColor, contextSystemColor, contextToolsColor, contextUserColor, contextAssistantColor, contextToolResultsColor, contextFreeColor, compactionColor, bgGray, black, highlightCode, getLanguageFromPath } from "./theme.js";
 
 const MAX_RESULT_LINES = 20;
 const MAX_RESULT_CHARS = 4000;
@@ -23,6 +23,7 @@ export class ChatUI {
   private reasoningEffort: string = "xhigh";
   private contextInfo: { system: number; tools: number; user: number; assistant: number; tool_results: number; context_window: number } | null = null;
   private compactionCount: number = 0;
+  private currentToolArgs: Record<string, unknown> = {};
 
   constructor(connection: GatewayConnection) {
     this.connection = connection;
@@ -209,10 +210,12 @@ export class ChatUI {
         this.setStatus(`Running tool: ${event.tool_name}`);
         const header = this.formatToolHeader(event.tool_name, event.args);
         this.insertBeforeEditor(new Text(header, 1, 0, toolColor));
+        // Store args for syntax highlighting in tool_end
+        this.currentToolArgs = event.args;
         if (event.tool_name === "edit") {
           const diff = this.formatEditDiff(event.args);
           if (diff) {
-            const md = new Markdown("```diff\n" + diff + "\n```", 0, 0, markdownTheme);
+            const md = new Markdown(diff, 0, 0, markdownTheme);
             this.insertBeforeEditor(md);
           }
         }
@@ -229,9 +232,10 @@ export class ChatUI {
         this.finalizeToolMarkdown();
         if (event.result) {
           const truncated = this.truncateResult(event.result);
-          const md = new Markdown("```\n" + truncated + "\n```", 0, 0, markdownTheme);
-          this.insertBeforeEditor(md);
+          const outputComponent = this.renderToolOutput(truncated, event.tool_name, this.currentToolArgs);
+          this.insertBeforeEditor(outputComponent);
         }
+        this.currentToolArgs = {};
         const status = event.is_error ? "error" : "done";
         const color = event.is_error ? errorColor : statusColor;
         this.insertBeforeEditor(new Text(`[${event.tool_name}: ${status}]`, 0, 0, color));
@@ -436,6 +440,36 @@ export class ChatUI {
     }
   }
 
+  /**
+   * Render tool output with optional syntax highlighting.
+   * Returns a Text or Markdown component based on whether we can detect a language.
+   */
+  private renderToolOutput(output: string, toolName: string, args: Record<string, unknown>): Text | Markdown {
+    // Try to detect language from file path for read/write tools
+    let lang: string | undefined;
+    let filePath: string | undefined;
+
+    if (toolName === "read") {
+      filePath = typeof args.path === "string" ? args.path : undefined;
+    } else if (toolName === "write") {
+      filePath = typeof args.file_path === "string" ? args.file_path : undefined;
+    }
+
+    if (filePath) {
+      lang = getLanguageFromPath(filePath);
+    }
+
+    if (lang) {
+      // Use syntax highlighting
+      const highlightedLines = highlightCode(output, lang);
+      const highlightedText = highlightedLines.join("\n");
+      return new Text(highlightedText, 0, 0);
+    } else {
+      // Plain text - use Markdown for any embedded formatting
+      return new Markdown(output, 0, 0, markdownTheme);
+    }
+  }
+
   private formatEditDiff(args: Record<string, unknown>): string | null {
     const oldText = typeof args.old_text === "string" ? args.old_text : "";
     const newText = typeof args.new_text === "string" ? args.new_text : "";
@@ -480,7 +514,7 @@ export class ChatUI {
   private updateToolMarkdown(): void {
     if (!this.currentToolText) return;
 
-    const display = "```\n" + this.truncateResult(this.currentToolText) + "\n```";
+    const display = this.truncateResult(this.currentToolText);
     if (this.currentToolMarkdown) {
       this.currentToolMarkdown.setText(display);
     } else {
@@ -520,14 +554,14 @@ export class ChatUI {
         timeout: 30_000,
       });
       if (output.trim()) {
-        const md = new Markdown("```\n" + output.trimEnd() + "\n```", 0, 0, markdownTheme);
+        const md = new Markdown(output.trimEnd(), 0, 0, markdownTheme);
         this.insertBeforeEditor(md);
       }
     } catch (err: any) {
       // execSync throws on non-zero exit; stdout/stderr are on the error object
       const output = (err.stdout ?? "") + (err.stderr ?? "");
       if (output.trim()) {
-        const md = new Markdown("```\n" + output.trimEnd() + "\n```", 0, 0, markdownTheme);
+        const md = new Markdown(output.trimEnd(), 0, 0, markdownTheme);
         this.insertBeforeEditor(md);
       } else {
         this.insertBeforeEditor(new Text(err.message ?? "Command failed", 0, 0, errorColor));
