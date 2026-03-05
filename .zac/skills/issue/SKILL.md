@@ -19,53 +19,34 @@ The user asks you to create an issue and provides a description. Determine an ap
 
 ### Create the Issue
 
-Use the following Python code to create the issue in the SQLite database:
+Run the create issue script with the title and description as arguments:
 
-```python
-import sqlite3
-import os
-from datetime import datetime
-
-DB_PATH = "/root/zac-dev/.zac/ISSUES.db"
-
-# Create DB and table if they don't exist
-os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-
-conn = sqlite3.connect(DB_PATH)
-cursor = conn.cursor()
-
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS issues (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'OPEN',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-    )
-""")
-
-# Insert the new issue with default status "OPEN"
-created_at = datetime.utcnow().isoformat()
-cursor.execute(
-    "INSERT INTO issues (title, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-    (title, body, "OPEN", created_at, created_at)
-)
-
-conn.commit()
-issue_id = cursor.lastrowid
-conn.close()
-
-print(f"Created issue #{issue_id}: {title}")
+```bash
+.zac/skills/issue/scripts/create_issue.py "<title>" "<description>"
 ```
 
-Replace `title` and `body` with the extracted issue details.
+The script accepts:
+- `title` - Issue title (required)
+- `description` - Issue description (required)
+- `--status` - Issue status (optional, default: OPEN)
 
-## Valid Status Values
+### Valid Status Values
 
 - `OPEN` - Issue is open and needs to be addressed
 - `CLOSED` - Issue has been resolved
 - `INPUT_REQUIRED` - Issue needs more information from the user
+
+## Example
+
+If the user provides:
+```
+There's a bug in the file handling code. When I try to delete a file that doesn't exist, the system crashes instead of showing a friendly error message. Can we fix this?
+```
+
+You would run:
+```bash
+.zac/skills/issue/scripts/create_issue.py "System crashes when deleting non-existent file" "There's a bug in the file handling code. When I try to delete a file that doesn't exist, the system crashes instead of showing a friendly error message. Can we fix this?"
+```
 
 ## Notes
 
