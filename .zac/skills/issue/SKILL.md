@@ -9,9 +9,43 @@ description: Create, list, and comment on local issues stored in an SQLite datab
 
 Use this skill when you need to create or manage local issues stored in an SQLite database instead of GitHub issues.
 
-## Instructions
+---
 
-### Extract the Issue Details
+## Issue Lifecycle
+
+An issue moves through the following lifecycle:
+
+```
+[OPEN]  <--->  [INPUT_REQUIRED]  ---->  [CLOSED]
+  ^            |                         
+  |            |                         
+  |            v                         
+  +----(user comments)----(zac needs clarification)
+```
+
+### Status Meanings
+
+- **OPEN**: Issue is ready to be worked on by Zac
+- **INPUT_REQUIRED**: Zac has asked a question and is waiting for user input
+- **CLOSED**: Issue has been resolved
+
+### Status Transitions
+
+1. **OPEN** → **INPUT_REQUIRED**: Zac encounters a blocker and needs clarification. Zac adds a comment (author="zac") and the status is automatically set to `INPUT_REQUIRED`.
+
+2. **INPUT_REQUIRED** → **OPEN**: User provides an answer by adding a comment (author="user"). The status is automatically set back to `OPEN`, indicating Zac can resume work.
+
+3. **OPEN** → **CLOSED**: Zac successfully fixes the issue and creates a pull request.
+
+### Comment Authors
+
+Comments can have different authors:
+- **`user`**: Comments from the user (default). When added to an `INPUT_REQUIRED` issue, it reopens the issue.
+- **`zac`**: Comments from Zac (the agent). When Zac adds a comment, it indicates the issue needs user input and sets status to `INPUT_REQUIRED`.
+
+---
+
+## Extract Issue Details
 
 The user asks you to create an issue and provides a description. Determine an appropriate title and use the user's description as the body.
 - A short, appropriate title that you create to summarize the issue (~50 chars)
@@ -123,7 +157,8 @@ The script accepts:
 ## Notes
 
 - The database is located at `.zac/ISSUES.db` (relative to the current directory)
-- Issues are created with status "OPEN" by default
+- Issues are created with status `OPEN` by default
 - The table includes `created_at` and `updated_at` timestamps
-- Comments have a foreign key to the issue and can be from any author (use `--author zac` when Zac adds a comment)
-- When Zac needs clarification, it will add a comment and change status to `INPUT_REQUIRED`
+- Comments have a foreign key to the issue
+- When Zac adds a comment (author=`zac`), the issue status is set to `INPUT_REQUIRED`
+- When a user adds a comment (author=`user`), the issue status is set to `OPEN` (if it was `INPUT_REQUIRED`)
