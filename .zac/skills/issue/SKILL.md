@@ -1,13 +1,13 @@
 ---
 name: issue
-description: Create a local issue stored in an SQLite database. Use when you want to record an issue locally rather than on GitHub.
+description: Create and list local issues stored in an SQLite database. Use when you want to record an issue locally rather than on GitHub.
 ---
 
-# Local Issue Creation Skill
+# Local Issue Management Skill
 
 ## When to Use
 
-Use this skill when you need to create a local issue stored in an SQLite database instead of a GitHub issue.
+Use this skill when you need to create or list local issues stored in an SQLite database instead of GitHub issues.
 
 ## Instructions
 
@@ -17,7 +17,9 @@ The user asks you to create an issue and provides a description. Determine an ap
 - A short, appropriate title that you create to summarize the issue (~50 chars)
 - The body as the **verbatim** text provided by the user (unchanged)
 
-### Create the Issue
+---
+
+## Create an Issue
 
 Run the create issue script with the title and description as arguments:
 
@@ -36,20 +38,45 @@ The script accepts:
 - `CLOSED` - Issue has been resolved
 - `INPUT_REQUIRED` - Issue needs more information from the user
 
-## Example
+### Example
 
-If the user provides:
-```
-There's a bug in the file handling code. When I try to delete a file that doesn't exist, the system crashes instead of showing a friendly error message. Can we fix this?
-```
-
-You would run:
 ```bash
-.zac/skills/issue/scripts/create_issue.py "System crashes when deleting non-existent file" "There's a bug in the file handling code. When I try to delete a file that doesn't exist, the system crashes instead of showing a friendly error message. Can we fix this?"
+.zac/skills/issue/scripts/create_issue.py "System crashes when deleting non-existent file" "There's a bug in the file handling code..."
+```
+
+---
+
+## List Issues
+
+Run the list issues script to display issues in markdown table format:
+
+```bash
+.zac/skills/issue/scripts/list_issues.py [--status OPEN|CLOSED|INPUT_REQUIRED] [--format markdown|json]
+```
+
+The script accepts:
+- `--status` - Filter by status (optional)
+- `--format` - Output format: markdown (default) or json
+
+### Examples
+
+List all issues:
+```bash
+.zac/skills/issue/scripts/list_issues.py
+```
+
+List only open issues:
+```bash
+.zac/skills/issue/scripts/list_issues.py --status OPEN
+```
+
+List issues in JSON format:
+```bash
+.zac/skills/issue/scripts/list_issues.py --format json
 ```
 
 ## Notes
 
-- The database is located at `/root/zac-dev/.zac/ISSUES.db`
+- The database is located at `.zac/ISSUES.db` (relative to the current directory)
 - Issues are created with status "OPEN" by default
 - The table includes `created_at` and `updated_at` timestamps
