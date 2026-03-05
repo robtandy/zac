@@ -73,14 +73,17 @@ def _get_open_issues(
         if not rows:
             return []
 
-        return [{
-            "id": row["id"],
-            "title": row["title"],
-            "description": row["description"],
-            "status": row["status"],
-            "created_at": row["created_at"],
-            "updated_at": row["updated_at"],
-        }]
+        issues = []
+        for row in rows:
+            issues.append({
+                "id": row["id"],
+                "title": row["title"],
+                "description": row["description"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            })
+        return issues
 
     cursor.execute(
         "SELECT id, title, description, status, created_at, updated_at FROM issues WHERE status = ? ORDER BY created_at ASC",
