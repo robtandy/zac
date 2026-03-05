@@ -99,6 +99,41 @@ def _update_issue_status(db_path: str, issue_id: int, status: str) -> None:
     conn.close()
 
 
+def _add_comment(db_path: str, issue_id: int, body: str, author: str = "zac") -> None:
+    """Add a comment to an issue in the database."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    now = datetime.now(timezone.utc).isoformat()
+    cursor.execute(
+        "INSERT INTO comments (issue_id, body, author, created_at) VALUES (?, ?, ?, ?)",
+        (issue_id, body, author, now),
+    )
+    cursor.execute(
+        "UPDATE issues SET updated_at = ? WHERE id = ?",
+        (now, issue_id),
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def _get_comments(db_path: str, issue_id: int) -> list[dict]:
+    """Get comments for an issue from the database."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, body, author, created_at FROM comments WHERE issue_id = ? ORDER BY created_at ASC",
+        (issue_id,),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [dict(row) for row in rows]
+
+
 def _create_worktree(branch_name: str) -> Path:
     """Create a new git worktree for the fix."""
     worktree_path = Path.cwd() / ".zac-fix-worktree"
@@ -137,6 +172,15 @@ For each issue assigned to you:
 5. Verify the fix by running the test
 6. Create a pull request with your fix
 
+## Issue Comments
+
+You can add comments to an issue by starting your response with "Zac: " followed by your question. The system will:
+1. Add your comment to the issue
+2. Change the issue status to INPUT_REQUIRED (so you don't work on it while waiting)
+3. Stop working on this issue until the user provides an answer
+
+When you need clarification from the user, add a comment starting with "Zac: " and the system will handle adding it to the database and updating the status.
+
 ## Operating Environment
 
 - You run in a **headless environment** with no TUI
@@ -151,6 +195,7 @@ You are working in a **separate git worktree** created specifically for this fix
 
 ### 1. Understand the Issue
 - Read the issue description carefully
+- Check if there are any existing comments on the issue
 - Read the relevant code to understand what the issue describes
 - Identify the files and functions that need to be modified
 
@@ -182,10 +227,11 @@ You are working in a **separate git worktree** created specifically for this fix
 
 ## Important Rules
 
-1. **Work in the worktree** - All code changes should be in the worktree directory
-2. **Test your changes** - Always verify fixes work before submitting PR
-3. **Be concise** - Don't add unnecessary changes or over-engineer solutions
-4. **Respect the cost limit** - Stop if API costs exceed the threshold
+1. **Ask clarifying questions using "Zac: " prefix** - This will add a comment and set status to INPUT_REQUIRED
+2. **Work in the worktree** - All code changes should be in the worktree directory
+3. **Test your changes** - Always verify fixes work before submitting PR
+4. **Be concise** - Don't add unnecessary changes or over-engineer solutions
+5. **Respect the cost limit** - Stop if API costs exceed the threshold
 
 ## Tools Available
 
@@ -235,6 +281,14 @@ async def _run_fix_mode(
         print(f"Issue #{issue_id}: {issue_title}")
         print(f"{'='*60}")
 
+        # Get existing comments for this issue
+        comments = _get_comments(db_path, issue_id)
+        if comments:
+            print(f"Comments on this issue:")
+            for comment in comments:
+                print(f"  [{comment['author']}] {comment['body'][:100]}...")
+            print()
+
         # Check cost
         if total_cost >= max_cost:
             print(f"Cost limit exceeded (${total_cost:.2f} >= ${max_cost:.2f})")
@@ -251,13 +305,19 @@ async def _run_fix_mode(
             continue
 
         # Build the prompt for this issue
+        comments_text = ""
+        if comments:
+            comments_text = "\n## Existing Comments:\n"
+            for comment in comments:
+                comments_text += f"- [{comment['author']}] {comment['body']}\n"
+
         fix_prompt = f"""Please fix local issue #{issue_id}.
 
 Issue Title: {issue_title}
 
 The issue description is:
 {issue_description}
-
+{comments_text}
 Your task is to:
 1. Understand the issue
 2. Reproduce the problem
@@ -303,8 +363,18 @@ Good luck!
             print(f"Estimated cost for this issue: ${estimated_cost:.4f}")
             print(f"Total cost so far: ${total_cost:.4f}")
 
+            # Check if Zac needs clarification (starts with "Zac: ")
+            lines = response_text.strip().split('\n')
+            if any(line.strip().startswith("Zac: ") for line in lines):
+                # Extract the question(s) and add as comments
+                for line in lines:
+                    if line.strip().startswith("Zac: "):
+                        question = line.strip()[5:]  # Remove "Zac: " prefix
+                        _add_comment(db_path, issue_id, question, "zac")
+                _update_issue_status(db_path, issue_id, "INPUT_REQUIRED")
+                print(f"Issue #{issue_id} needs clarification. Added comment(s) and set status to INPUT_REQUIRED.")
             # Update issue status based on result
-            if "PR #" in response_text or "pull request" in response_text.lower():
+            elif "PR #" in response_text or "pull request" in response_text.lower():
                 # Extract PR URL if possible
                 pr_url = ""
                 for line in response_text.split('\n'):

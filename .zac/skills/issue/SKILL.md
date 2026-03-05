@@ -1,13 +1,13 @@
 ---
 name: issue
-description: Create and list local issues stored in an SQLite database. Use when you want to record an issue locally rather than on GitHub.
+description: Create, list, and comment on local issues stored in an SQLite database. Use when you want to record an issue locally rather than on GitHub.
 ---
 
 # Local Issue Management Skill
 
 ## When to Use
 
-Use this skill when you need to create or list local issues stored in an SQLite database instead of GitHub issues.
+Use this skill when you need to create or manage local issues stored in an SQLite database instead of GitHub issues.
 
 ## Instructions
 
@@ -73,14 +73,51 @@ List only open issues:
 .zac/skills/issue/scripts/list_issues.py --status OPEN
 ```
 
-List in simple table format:
+---
+
+## Add a Comment
+
+Run the add comment script to add a comment to an issue:
+
 ```bash
-.zac/skills/issue/scripts/list_issues.py --format simple
+.zac/skills/issue/scripts/add_comment.py <issue_id> "<body>" [--author <author>]
 ```
 
-List in JSON format:
+The script accepts:
+- `issue_id` - Issue ID to add comment to (required)
+- `body` - Comment text (required)
+- `--author` - Author name (optional, default: user)
+
+### Examples
+
+Add a comment to issue #1:
 ```bash
-.zac/skills/issue/scripts/list_issues.py --format json
+.zac/skills/issue/scripts/add_comment.py 1 "This is a comment"
+```
+
+Add a comment from Zac (the agent):
+```bash
+.zac/skills/issue/scripts/add_comment.py 1 "What should the output format be?" --author zac
+```
+
+---
+
+## List Comments
+
+Run the list comments script to view comments on an issue:
+
+```bash
+.zac/skills/issue/scripts/list_comments.py <issue_id> [--format markdown|json]
+```
+
+The script accepts:
+- `issue_id` - Issue ID to list comments for (required)
+- `--format` - Output format (optional, default: markdown)
+
+### Example
+
+```bash
+.zac/skills/issue/scripts/list_comments.py 1
 ```
 
 ## Notes
@@ -88,3 +125,5 @@ List in JSON format:
 - The database is located at `.zac/ISSUES.db` (relative to the current directory)
 - Issues are created with status "OPEN" by default
 - The table includes `created_at` and `updated_at` timestamps
+- Comments have a foreign key to the issue and can be from any author (use `--author zac` when Zac adds a comment)
+- When Zac needs clarification, it will add a comment and change status to `INPUT_REQUIRED`
