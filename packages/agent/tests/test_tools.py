@@ -134,3 +134,28 @@ async def test_edit_tool_returns_diff(temp_file):
     assert result.diff is not None
     assert "+" in result.diff  # Diff should have additions
     assert "-" in result.diff  # Diff should have deletions
+
+
+@pytest.mark.asyncio
+async def test_edit_tool_diff_includes_path(temp_file):
+    """Test that EditTool diff includes the file path in the header."""
+    edit_tool = EditTool()
+    
+    # Read the file to get its content
+    with open(temp_file, 'r') as f:
+        original_content = f.read()
+    
+    result = await edit_tool.execute({
+        "path": temp_file,
+        "oldText": 'print("Hello, world!")',
+        "newText": 'print("Diff test!")',
+    })
+    
+    assert not result.is_error
+    assert result.diff is not None
+    
+    # The diff should include the file path in the header (--- and +++ lines)
+    assert "---" in result.diff
+    assert "+++" in result.diff
+    # The path should appear in both header lines
+    assert temp_file in result.diff

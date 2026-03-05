@@ -138,7 +138,7 @@ def fuzzy_find_text(content: str, old_text: str) -> tuple[bool, int, int, str]:
     return (True, fuzzy_index, len(fuzzy_old_text), fuzzy_content)
 
 
-def generate_diff_string(old_content: str, new_content: str, context_lines: int = 4) -> tuple[str, int | None]:
+def generate_diff_string(old_content: str, new_content: str, path: str = "", context_lines: int = 4) -> tuple[str, int | None]:
     """
     Generate a unified diff string with line numbers and context.
     Returns: (diff_string, first_changed_line)
@@ -147,11 +147,16 @@ def generate_diff_string(old_content: str, new_content: str, context_lines: int 
     new_lines = new_content.split("\n")
 
     # Use Python's difflib
+    # Add file paths to diff header if path is provided
+    fromfile = path if path else "original"
+    tofile = path if path else "modified"
     diff = difflib.unified_diff(
         old_lines,
         new_lines,
         lineterm="",
         n=context_lines,
+        fromfile=fromfile,
+        tofile=tofile,
     )
 
     output: list[str] = []
@@ -553,7 +558,7 @@ The tool returns a diff of the changes made.
 
         # Generate diff
         diff_string, first_changed_line = generate_diff_string(
-            content_for_replacement, new_content
+            content_for_replacement, new_content, path=path
         )
 
         return ToolResult(
